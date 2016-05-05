@@ -251,9 +251,9 @@ void database_test::test_swmr()
             ck_usleep( 10000 );
         }
     });
-    
+
     ck_usleep( 1000000 );
-    
+
     // An interesting observed behaviour:
     // It looks like read transactions only have access to only written data
     // from before the creation of the read transaction. Since our iterator
@@ -280,7 +280,7 @@ void database_test::test_swmr()
             }
         }
     });
-    
+
     bool r2Running = true;
     uint32_t r2Reads = 0;
     thread r2([&](){
@@ -301,7 +301,7 @@ void database_test::test_swmr()
             }
         }
     });
-        
+
     ck_usleep( 5000000 );
 
     writerRunning = false;
@@ -321,8 +321,8 @@ void database_test::test_mwmr()
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );            
-    
+    database db( "test.db" );
+
     struct writer_context
     {
         thread wt;
@@ -345,13 +345,13 @@ void database_test::test_mwmr()
                    return to_string(wc.start_time);
                 });
                 ++wc.start_time;
-                ck_usleep( 1 );                
+                ck_usleep( 1 );
             }
         } );
     }
-    
+
     ck_usleep( 1000000 );
-    
+
     struct reader_context
     {
         thread rt;
@@ -361,7 +361,7 @@ void database_test::test_mwmr()
     };
 
     vector<reader_context> readerContexts( NUM_THREADS );
-    
+
     size_t wi = 0;
     for( auto& rc : readerContexts )
     {
@@ -387,9 +387,9 @@ void database_test::test_mwmr()
             }
         } );
     }
-    
+
     ck_usleep( 5000000 );
-    
+
     size_t totalReads = 0;
     for( auto& rc : readerContexts )
     {
@@ -405,7 +405,7 @@ void database_test::test_mwmr()
         wc.writer_running = false;
         wc.wt.join();
     }
-    
+
     printf("total reads = %lu\n",totalReads);
     printf("total writes = %lu\n",totalWrites);
     fflush(stdout);
