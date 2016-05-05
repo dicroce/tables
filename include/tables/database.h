@@ -1,6 +1,6 @@
 
-#ifndef __reblob_database
-#define __reblob_database
+#ifndef __tables_database
+#define __tables_database
 
 #include "lmdb/lmdb.h"
 #include "cppkit/ck_exception.h"
@@ -12,7 +12,7 @@
 
 class database_test;
 
-namespace reblob
+namespace tables
 {
 
 typedef std::function<std::string(std::string col, const uint8_t* src, size_t size)> indexCB;

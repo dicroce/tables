@@ -1,7 +1,7 @@
 
 #include "tables/database.h"
 
-using namespace reblob;
+using namespace tables;
 using namespace std;
 
 typedef function<void(const string& prefix, const string& key, const string& val)> rangeCB;

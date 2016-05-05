@@ -11,7 +11,7 @@
 
 using namespace std;
 using namespace cppkit;
-using namespace reblob;
+using namespace tables;
 
 REGISTER_TEST_FIXTURE(database_test);
 
