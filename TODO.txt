@@ -1,2 +1,0 @@
-
-1) Implement database updata/upgrade facility.
