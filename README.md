@@ -13,22 +13,14 @@ The above code creates a 16 MB database file called "test.db" that consists of a
 ```c++
 database db( "test.db" );
 
-struct quotes
-{
-  string words;
-  int page;
-};
-
-//vector<quotes> q = { }
-
 string val1 = "Stick him with the pointy end.";
-db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
+db.insert( "quotes", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
     return "100";
 } );
 
 string val2 = "The north remembers.";
-db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-    return "100";
+db.insert( "quotes", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
+    return "500";
 } );
 
 ```
