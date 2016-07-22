@@ -39,10 +39,10 @@ Querying data is done by requesting an interator for a particular table and inde
 ```
 
 # Building
-Tables is a cmake project and is built in the usual fashion.
+Don't forget the --recursive option when cloning this repository! Other than that Tables is a standard cmake project and is built in the usual fashion.
 
 ```bash
-git clone https://github.com/dicroce/tables
+git clone --recursive https://github.com/dicroce/tables
 mkdir -p tables/build
 cd tables/build
 cmake ..
