@@ -1,4 +1,4 @@
-# tables
+# Tables
 
 Tables is a C++11 based wrapper for the awesome LMDB embedded database. Tables adds a very thin veneer of the relational database model on top of lmdb:
 
@@ -23,4 +23,29 @@ db.insert( "quotes", (uint8_t*)val1.c_str(), val1.length(), []( string colName, 
     return "500";
 } );
 
+```
+
+The first argument to database::insert() is the name of the table you want to insert your blob into. Then you provide a pointer to you blob and its size. Finally you provide your index callback. The index callback will be called once for every index specified in the schema for this table (in this case once). The callback is called with the index column name and the pointer and size of the blob. It is the responsibility of the callback to return a value (from the row) for the requested index.
+
+Querying data is done by requesting an interator for a particular table and index. The iterator can then be incremented and decremented through the rows.
+
+```c++
+    auto iter = db.get_iterator( "quotes", "page" );
+    iter.find( "100" );
+    UT_ASSERT( iter.valid() );
+    auto res = iter.current_data();
+    string foundVal( (char*)res.second, res.first );
+    UT_ASSERT( foundVal == val1 );
+```
+
+# Building
+Tables is a cmake project and is built in the usual fashion.
+
+```bash
+git clone https://github.com/dicroce/tables
+mkdir -p tables/build
+cd tables/build
+cmake ..
+make
+make instll
 ```
