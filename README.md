@@ -45,5 +45,5 @@ mkdir -p tables/build
 cd tables/build
 cmake ..
 make
-make instll
+make install
 ```
