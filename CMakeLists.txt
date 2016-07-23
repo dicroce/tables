@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(tables2)
+project(tables)
 include(ExternalProject)
 
 ExternalProject_add(
@@ -31,26 +31,26 @@ include_directories(
 # static library...
 
 add_library(
-    tables2_static STATIC
-    include/tables2/database.h
+    tables_static STATIC
+    include/tables/database.h
     source/database.cpp
 )
 
-target_link_libraries(tables2_static lmdb_static)
+target_link_libraries(tables_static lmdb_static)
 
-add_dependencies(tables2_static lmdb_library)
+add_dependencies(tables_static lmdb_library)
 
 # dynamic library...
 
 add_library(
-    tables2 SHARED
-    include/tables2/database.h
+    tables SHARED
+    include/tables/database.h
     source/database.cpp
 )
 
-target_link_libraries(tables2 lmdb)
+target_link_libraries(tables lmdb)
 
-add_dependencies(tables2 lmdb_library)
+add_dependencies(tables lmdb_library)
 
 # unit test...
 
@@ -59,7 +59,7 @@ add_executable(ut ut/include/framework.h
                   ut/source/framework.cpp
                   ut/source/database_test.cpp)
 
-target_link_libraries(ut tables2_static uuid pthread)
+target_link_libraries(ut tables_static uuid pthread)
 
 # installation (first lmdb)...
 
@@ -73,7 +73,7 @@ install(FILES deps/lmdb/libraries/liblmdb/lmdb.h
 
 #              (now tables)...
 
-install(TARGETS tables2 tables2_static
+install(TARGETS tables tables_static
         LIBRARY DESTINATION "lib"
         ARCHIVE DESTINATION "lib"
         RUNTIME DESTINATION "lib"

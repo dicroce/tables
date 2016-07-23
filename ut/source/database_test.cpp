@@ -1,6 +1,6 @@
 
 #include "database_test.h"
-#include "tables2/database.h"
+#include "tables/database.h"
 #include <algorithm>
 #include <thread>
 #include <mutex>
