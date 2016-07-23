@@ -254,7 +254,7 @@ public:
             return std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );
         }
 
-        std::pair<size_t, const uint8_t*> current_data()
+        std::pair<const uint8_t*, size_t> current_data()
         {
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
@@ -266,7 +266,7 @@ public:
             if( mdb_get( _txn, _dbi, &shimKey, &shimVal ) != 0 )
                 throw std::runtime_error(("Unable to find data!"));
 
-            return std::make_pair( shimVal.mv_size, (uint8_t*)shimVal.mv_data );
+            return std::make_pair( (uint8_t*)shimVal.mv_data, shimVal.mv_size );
         }
 
     private:

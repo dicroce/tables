@@ -70,7 +70,7 @@ void database_test::test_basic_insert()
     iter.find( "1234" );
     UT_ASSERT( iter.valid() );
     auto res = iter.current_data();
-    string foundVal( (char*)res.second, res.first );
+    string foundVal( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val );
 }
 
@@ -118,31 +118,31 @@ void database_test::test_basic_iteration()
     iter.find( "100" );
     UT_ASSERT( iter.valid() );
     auto res = iter.current_data();
-    string foundVal( (char*)res.second, res.first );
+    string foundVal( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val1 );
 
     iter.next();
     UT_ASSERT( iter.valid() );
     res = iter.current_data();
-    foundVal = string( (char*)res.second, res.first );
+    foundVal = string( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val2 );
 
     iter.next();
     UT_ASSERT( iter.valid() );
     res = iter.current_data();
-    foundVal = string( (char*)res.second, res.first );
+    foundVal = string( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val3 );
 
     iter.next();
     UT_ASSERT( iter.valid() );
     res = iter.current_data();
-    foundVal = string( (char*)res.second, res.first );
+    foundVal = string( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val4 );
 
     iter.next();
     UT_ASSERT( iter.valid() );
     res = iter.current_data();
-    foundVal = string( (char*)res.second, res.first );
+    foundVal = string( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val5 );
 
     iter.next();
@@ -151,7 +151,7 @@ void database_test::test_basic_iteration()
     iter.find( "100" );
     UT_ASSERT( iter.valid() == true );
     res = iter.current_data();
-    foundVal = string( (char*)res.second, res.first );
+    foundVal = string( (char*)res.first, res.second );
     UT_ASSERT( foundVal == val1 );
 
     iter.prev();
@@ -208,7 +208,7 @@ void database_test::test_multiple_indexes()
         fooIter.find( "100" );
         UT_ASSERT( fooIter.valid() );
         auto res = fooIter.current_data();
-        string foundVal( (char*)res.second, res.first );
+        string foundVal( (char*)res.first, res.second );
         UT_ASSERT( foundVal == val1 );
     }
 
@@ -217,7 +217,7 @@ void database_test::test_multiple_indexes()
         barIter.find( "D" );
         UT_ASSERT( barIter.valid() );
         auto res = barIter.current_data();
-        string foundVal( (char*)res.second, res.first );
+        string foundVal( (char*)res.first, res.second );
         UT_ASSERT( foundVal == val4 );
     }
 }
