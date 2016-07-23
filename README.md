@@ -32,10 +32,8 @@ Querying data is done by requesting an interator for a particular table and inde
 ```c++
     auto iter = db.get_iterator( "quotes", "page" );
     iter.find( "100" );
-    UT_ASSERT( iter.valid() );
     auto res = iter.current_data();
     string foundVal( (char*)res.second, res.first );
-    UT_ASSERT( foundVal == val1 );
 ```
 
 # Building
