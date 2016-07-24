@@ -1,0 +1,20 @@
+
+Composite Keys
+
+    - When we query we'd like to be able to combine our indexes ad hoc and get the right results. Consider this table:
+
+        segments
+          data_source_id
+          start_time
+
+      We'd like to be able to query by time AND data_source_id.
+
+          index_segments_e130c4f6-a12c-4152-8f7f-4f59173fb492_1469397588523
+          index_segments_e130c4f6-a12c-4152-8f7f-4f59173fb492_1469397939234
+
+      Solution - LMDB lets you provide cmp() function. Write a comparison function that overwrites the parts of the
+                 key that are unused by a particular query.
+
+                 Example: if a query specifiec time only, overwrite the data_soure_id part all incoming keys with
+                 spaces.
+
