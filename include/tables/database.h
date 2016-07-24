@@ -202,7 +202,7 @@ public:
             if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_SET_RANGE ) == 0 )
             {
                 std::string prefix = "index_" + _tableName + "_" + _index;
-                auto ck = std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );                
+                auto ck = std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );
                 if( ck.compare(0, prefix.length(), prefix) == 0 )
                     _validIterator = true;
                 else _validIterator = false;
