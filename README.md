@@ -1,5 +1,7 @@
 # Tables
 
+**_Tables is BETA software and I expect to evolve the API a bit more before it stabilizes. Use at your own risk_**
+
 Tables is a C++11 based wrapper for the awesome LMDB embedded database. Tables adds a very thin veneer of the relational database model on top of lmdb:
 
 ```c++
@@ -47,3 +49,10 @@ cmake ..
 make
 make install
 ```
+
+# TODO
+    - Composite Keys
+        - Change index to be combined index.
+        - Implement custom compare function (and activate via mdb_set_compare()) that nulls out parts of incoming keys
+          not included in this iterator.
+        - Change iterator find() API to support multiple indexes.
