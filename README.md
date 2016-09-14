@@ -5,7 +5,7 @@
 Tables is a C++11 based wrapper for the awesome LMDB embedded database. Tables adds a very thin veneer of the relational database model on top of lmdb:
 
 ```c++
-map<string,list<string>> schema = { make_pair( "quotes", vector<string>{ "page", "speaker" } ) };
+map<string,vector<string>> schema = { make_pair( "quotes", vector<string>{ "page", "speaker" } ) };
 
 database::create_database( "quotes.db", 16 * (1024*1024), schema );
 ```
