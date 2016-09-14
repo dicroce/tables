@@ -321,7 +321,7 @@ public:
 
     static void create_database( const std::string& fileName,
                                  uint64_t size,
-                                 const std::map<std::string, std::list<std::string>>& schema )
+                                 const std::map<std::string, std::vector<std::string>>& schema )
     {
         MDB_env* env = NULL;
         if( mdb_env_create( &env ) != 0 )

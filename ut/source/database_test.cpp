@@ -24,9 +24,9 @@ void database_test::teardown()
 
 void database_test::test_create()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segment_files", list<string>{ "time", "foo" } ),
-        make_pair( "segments", list<string>{ "start", "end", "sdp" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segment_files", vector<string>{ "time", "foo" } ),
+        make_pair( "segments", vector<string>{ "start", "end", "sdp" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -53,8 +53,8 @@ void database_test::test_create()
 
 void database_test::test_basic_insert()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segments", list<string>{ "time" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segments", vector<string>{ "time" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -76,8 +76,8 @@ void database_test::test_basic_insert()
 
 void database_test::test_basic_iteration()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segments", list<string>{ "time" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segments", vector<string>{ "time" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -160,8 +160,8 @@ void database_test::test_basic_iteration()
 
 void database_test::test_multiple_indexes()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segments", list<string>{ "foo", "bar" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segments", vector<string>{ "foo", "bar" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -224,8 +224,8 @@ void database_test::test_multiple_indexes()
 
 void database_test::test_swmr()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segments", list<string>{ "foo" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segments", vector<string>{ "foo" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -310,8 +310,8 @@ void database_test::test_swmr()
 
 void database_test::test_mwmr()
 {
-    map<string,list<string>> schema = {
-        make_pair( "segment_files", list<string>{ "start_time", "end_time" } )
+    map<string,vector<string>> schema = {
+        make_pair( "segment_files", vector<string>{ "start_time", "end_time" } )
     };
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
