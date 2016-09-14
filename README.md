@@ -5,29 +5,31 @@
 Tables is a C++11 based wrapper for the awesome LMDB embedded database. Tables adds a very thin veneer of the relational database model on top of lmdb:
 
 ```c++
-map<string,list<string>> schema = { make_pair( "quotes", list<string>{ "page" } ) };
+map<string,list<string>> schema = { make_pair( "quotes", list<string>{ "page", "speaker" } ) };
 
-database::create_database( "test.db", 16 * (1024*1024), schema );
+database::create_database( "quotes.db", 16 * (1024*1024), schema );
 ```
 
-The above code creates a 16 MB database file called "test.db" that consists of a single table called "quotes" with a single indexable (searchable) column called "page". Since the internal format of the blobs you will be inserting into this table are unknown to tables, at insertion time you must provide a callback that returns to Tables the value of each indexable column for the row being inserted.
+The above code creates a 16 MB database file called "quotes.db" that consists of a single table called "quotes" with two indexable (searchable) columns. Since the internal format of the blobs you will be inserting into this table are unknown to tables, at insertion time you must provide a callback that returns to tables the value of each indexable column for the row being inserted. In this case, the blob is a JSON string, so I can use a JSON parser to fetch the appropriate column values in the callback.
 
 ```c++
 database db( "test.db" );
 
-string val1 = "Stick him with the pointy end.";
+string val1 = "{ \"quote\": \"Stick him with the pointy end.\", \"page\": \"100\", \"speaker\": \"John Snow\" }";
 db.insert( "quotes", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-    return "100";
+    json p( src, size );
+    return p[colName];
 } );
 
-string val2 = "The north remembers.";
+string val2 = "{ \"quote\": \"The north remembers.\", \"page\": \"200\", \"speaker\": \"Bran\" }";
 db.insert( "quotes", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-    return "500";
+    json p( src, size );
+    return p[colName];
 } );
 
 ```
 
-The first argument to database::insert() is the name of the table you want to insert your blob into. Then you provide a pointer to you blob and its size. Finally you provide your index callback. The index callback will be called once for every index specified in the schema for this table (in this case once). The callback is called with the index column name and the pointer and size of the blob. It is the responsibility of the callback to return a value (from the row) for the requested index.
+The first argument to database::insert() is the name of the table you want to insert your blob into. Then you provide a pointer to you blob and its size. Finally you provide your index callback. The index callback will be called once for every index specified in the schema for this table (in this case once). The callback is called with the index column name and the pointer and size of the blob. It is the responsibility of the callback to return a value (from the row) for the requested column.
 
 Querying data is done by requesting an interator for a particular table and index. The iterator can then be incremented and decremented through the rows.
 
