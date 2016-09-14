@@ -51,10 +51,3 @@ cmake ..
 make
 make install
 ```
-
-# TODO
-    - Composite Keys
-        - Change index to be combined index.
-        - Implement custom compare function (and activate via mdb_set_compare()) that nulls out parts of incoming keys
-          not included in this iterator.
-        - Change iterator find() API to support multiple indexes.
