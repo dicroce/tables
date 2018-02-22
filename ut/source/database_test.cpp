@@ -12,6 +12,10 @@ REGISTER_TEST_FIXTURE(database_test);
 
 void database_test::setup()
 {
+    if( ut_file_exists("test.db") )
+        ut_file_unlink( "test.db" );
+    if( ut_file_exists("test.db-lock" ) )
+        ut_file_unlink( "test.db-lock" );
 }
 
 void database_test::teardown()
@@ -404,4 +408,88 @@ void database_test::test_mwmr()
     printf("total reads = %lu\n",totalReads);
     printf("total writes = %lu\n",totalWrites);
     fflush(stdout);
+}
+
+void database_test::test_primary_key_iteration()
+{
+    map<string,vector<string>> schema = {
+        make_pair( "segments", vector<string>{ "time" } )
+    };
+
+    database::create_database( "test.db", 16 * (1024*1024), schema );
+
+    database db( "test.db" );
+
+    string val1 = "Stick him with the pointy end.";
+    auto pk1 = db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
+        UT_ASSERT( colName == "time" );
+        return "100";
+    } );
+
+    string val2 = "Money buys a mans silence for a time. A bolt in the heart buys it forever.";
+    auto pk2 = db.insert( "segments", (uint8_t*)val2.c_str(), val2.length(), []( string colName, const uint8_t* src, size_t size ) {
+        UT_ASSERT( colName == "time" );
+        return "200";
+    } );
+
+    string val3 = "Some old wounds never truly heal, and bleed again at the slightest word.";
+    auto pk3 = db.insert( "segments", (uint8_t*)val3.c_str(), val3.length(), []( string colName, const uint8_t* src, size_t size ) {
+        UT_ASSERT( colName == "time" );
+        return "300";
+    } );
+
+    string val4 = "The lord of light wants his enemies burned. The drowned got wants them drowned. Why are all the Gods such vicious cunts? Where is the god of tits and wine?";
+    auto pk4 = db.insert( "segments", (uint8_t*)val4.c_str(), val4.length(), []( string colName, const uint8_t* src, size_t size ) {
+        UT_ASSERT( colName == "time" );
+        return "400";
+    } );
+
+    string val5 = "A mind needs books just like a sword needs whetstone.";
+    auto pk5 = db.insert( "segments", (uint8_t*)val5.c_str(), val5.length(), []( string colName, const uint8_t* src, size_t size ) {
+        UT_ASSERT( colName == "time" );
+        return "500";
+    } );
+
+    auto iter = db.get_primary_key_iterator( "segments" );
+    iter.find( pk1 );
+    UT_ASSERT( iter.valid() );
+    auto res = iter.current_data();
+    string foundVal( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val1 );
+
+    iter.next();
+    UT_ASSERT( iter.valid() );
+    res = iter.current_data();
+    foundVal = string( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val2 );
+
+    iter.next();
+    UT_ASSERT( iter.valid() );
+    res = iter.current_data();
+    foundVal = string( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val3 );
+
+    iter.next();
+    UT_ASSERT( iter.valid() );
+    res = iter.current_data();
+    foundVal = string( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val4 );
+
+    iter.next();
+    UT_ASSERT( iter.valid() );
+    res = iter.current_data();
+    foundVal = string( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val5 );
+
+    iter.next();
+    UT_ASSERT( iter.valid() == false );
+
+    iter.find( pk1 );
+    UT_ASSERT( iter.valid() == true );
+    res = iter.current_data();
+    foundVal = string( (char*)res.first, res.second );
+    UT_ASSERT( foundVal == val1 );
+
+    iter.prev();
+    UT_ASSERT( iter.valid() == false );
 }

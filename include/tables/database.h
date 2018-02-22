@@ -126,7 +126,7 @@ public:
     class iterator final
     {
     public:
-        iterator( const database* db, const std::string& index, const std::string& tableName ) :
+        iterator( const database* db, const std::string& tableName, const std::string& index = std::string()) :
             _db(db),
             _index(index),
             _tableName(tableName),
@@ -194,21 +194,18 @@ public:
 
         void find( const std::string& val )
         {
-            std::string key = "index_" + _tableName + "_" + _index + "_" + val;
-
-            _shimKey.mv_size = key.length();
-            _shimKey.mv_data = const_cast<char*>(key.c_str());
-
-            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_SET_RANGE ) == 0 )
+            if(_index.empty())
             {
-                std::string prefix = "index_" + _tableName + "_" + _index;
-                auto ck = std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );
-                if( ck.compare(0, prefix.length(), prefix) == 0 )
-                    _validIterator = true;
-                else _validIterator = false;
-
+                auto key = _tableName + "_" + val;
+                auto prefix = _tableName;
+                _set_cursor(key, prefix);
             }
-            else _validIterator = false;
+            else
+            {
+                auto key = "index_" + _tableName + "_" + _index + "_" + val;
+                auto prefix = "index_" + _tableName + "_" + _index;
+                _set_cursor(key, prefix);
+            }
         }
 
         void next()
@@ -216,14 +213,9 @@ public:
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
 
-            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_NEXT ) != MDB_NOTFOUND )
-            {
-                std::string prefix = "index_" + _tableName + "_" + _index;
-                auto ck = current_key();
-                if( ck.compare(0, prefix.length(), prefix) != 0 )
-                    _validIterator = false;
-            }
-            else _validIterator = false;
+            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + "_" + _index;
+
+            _next_cursor(prefix);
         }
 
         void prev()
@@ -231,14 +223,9 @@ public:
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
 
-            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_PREV ) != MDB_NOTFOUND )
-            {
-                std::string prefix = "index_" + _tableName + "_" + _index;
-                auto ck = current_key();
-                if( ck.compare(0, prefix.length(), prefix) != 0 )
-                    _validIterator = false;
-            }
-            else _validIterator = false;
+            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + "_" + _index;
+
+            _prev_cursor(prefix);
         }
 
         bool valid()
@@ -260,9 +247,18 @@ public:
                 throw std::runtime_error(("Invalid iterator!"));
 
             MDB_val shimKey, shimVal;
-            shimKey.mv_size = _shimVal.mv_size;
-            shimKey.mv_data = _shimVal.mv_data;
 
+            if(_index.empty())
+            {
+                shimKey.mv_size = _shimKey.mv_size;
+                shimKey.mv_data = _shimKey.mv_data;
+            }
+            else
+            {
+                shimKey.mv_size = _shimVal.mv_size;
+                shimKey.mv_data = _shimVal.mv_data;
+            }
+    
             if( mdb_get( _txn, _dbi, &shimKey, &shimVal ) != 0 )
                 throw std::runtime_error(("Unable to find data!"));
 
@@ -270,6 +266,43 @@ public:
         }
 
     private:
+        void _set_cursor(const std::string& key, const std::string& prefix)
+        {
+            _shimKey.mv_size = key.length();
+            _shimKey.mv_data = const_cast<char*>(key.c_str());
+
+            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_SET_RANGE ) == 0 )
+            {
+                auto ck = std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );
+                if( ck.compare(0, prefix.length(), prefix) == 0 )
+                    _validIterator = true;
+                else _validIterator = false;
+            }
+            else _validIterator = false;            
+        }
+
+        void _next_cursor(const std::string& prefix)
+        {
+            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_NEXT ) != MDB_NOTFOUND )
+            {
+                auto ck = current_key();
+                if( ck.compare(0, prefix.length(), prefix) != 0 )
+                    _validIterator = false;
+            }
+            else _validIterator = false;            
+        }
+
+        void _prev_cursor(const std::string& prefix)
+        {
+            if( mdb_cursor_get( _indexCursor, &_shimKey, &_shimVal, MDB_PREV ) != MDB_NOTFOUND )
+            {
+                auto ck = current_key();
+                if( ck.compare(0, prefix.length(), prefix) != 0 )
+                    _validIterator = false;
+            }
+            else _validIterator = false;            
+        }
+
         const database* _db;
         std::string _index;
         std::string _tableName;
@@ -371,9 +404,9 @@ public:
     }
 
     template<typename indexCB>
-    void insert( const std::string& tableName,
-                 const uint8_t* src, size_t size,
-                 indexCB icb )
+    std::string insert( const std::string& tableName,
+                        const uint8_t* src, size_t size,
+                        indexCB icb )
     {
         std::string newID;
         _transaction( _env, false, [&]( MDB_txn* txn, MDB_dbi dbi, MDB_cursor* cursor ) {
@@ -390,11 +423,18 @@ public:
                 _putByKey( txn, dbi, "index_" + tableName + "_" + indexName + "_" + val, tableName + "_" + newID );
             }
         } );
+
+        return newID;
     }
 
     iterator get_iterator( const std::string& tableName, const std::string& index )
     {
-        return iterator( this, index, tableName );
+        return iterator( this, tableName, index );
+    }
+
+    iterator get_primary_key_iterator(const std::string& tableName)
+    {
+        return iterator(this, tableName);
     }
 
 private:

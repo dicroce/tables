@@ -11,6 +11,7 @@ public:
         TEST(database_test::test_multiple_indexes);
         TEST(database_test::test_swmr);
         TEST(database_test::test_mwmr);
+        TEST(database_test::test_primary_key_iteration);
     TEST_SUITE_END();
 
     virtual ~database_test() throw() {}
@@ -24,4 +25,5 @@ public:
     void test_multiple_indexes();
     void test_swmr();
     void test_mwmr();
+    void test_primary_key_iteration();
 };
