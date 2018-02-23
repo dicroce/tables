@@ -20,7 +20,7 @@ set_target_properties(lmdb PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_D
 
 # global build stuff...
 
-add_definitions(-std=c++11)
+add_definitions(-std=c++11 -O0 -g)
 
 include_directories(
     include

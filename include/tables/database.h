@@ -3,6 +3,7 @@
 #define __tables_database
 
 #include "liblmdb/lmdb.h"
+#include "tables/json.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -118,6 +119,13 @@ void _transaction( MDB_env* env, bool readOnly, bodyCB f )
     }
 }
 
+struct table_info
+{
+    std::vector<std::string> regular_columns;
+    std::vector<std::string> index_columns;
+    std::vector<std::vector<std::string>> compound_indexes;
+};
+
 class database final
 {
     friend class ::database_test;
@@ -202,8 +210,8 @@ public:
             }
             else
             {
-                auto key = "index_" + _tableName + "_" + _index + "_" + val;
-                auto prefix = "index_" + _tableName + "_" + _index;
+                auto key = "index_" + _tableName + _index + "_" + val;
+                auto prefix = "index_" + _tableName + _index;
                 _set_cursor(key, prefix);
             }
         }
@@ -213,7 +221,7 @@ public:
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
 
-            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + "_" + _index;
+            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + _index;
 
             _next_cursor(prefix);
         }
@@ -223,7 +231,7 @@ public:
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
 
-            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + "_" + _index;
+            auto prefix = (_index.empty())?_tableName:"index_" + _tableName + _index;
 
             _prev_cursor(prefix);
         }
@@ -241,7 +249,7 @@ public:
             return std::string( (char*)_shimKey.mv_data, _shimKey.mv_size );
         }
 
-        std::pair<const uint8_t*, size_t> current_data()
+        std::string current_data()
         {
             if( !_validIterator )
                 throw std::runtime_error(("Invalid iterator!"));
@@ -262,7 +270,7 @@ public:
             if( mdb_get( _txn, _dbi, &shimKey, &shimVal ) != 0 )
                 throw std::runtime_error(("Unable to find data!"));
 
-            return std::make_pair( (uint8_t*)shimVal.mv_data, shimVal.mv_size );
+            return std::string((char*)shimVal.mv_data, shimVal.mv_size);
         }
 
     private:
@@ -326,23 +334,34 @@ public:
             throw std::runtime_error(("Unable to open database environment."));
 
         _transaction( _env, true, [this]( MDB_txn* txn, MDB_dbi dbi, MDB_cursor* cursor ) {
-            this->_version = stoi( _getByKey( cursor, "database_version" ).second );
 
-            _scanByKeyPrefix( "table_name_",
-                              cursor,
-                              [this](const std::string& prefix, const std::string& key, const std::string& val)->bool {
-                              this->_schema.insert( std::make_pair( key.substr(prefix.length()), std::list<std::string>{} ) );
-                              } );
+            auto tnj = nlohmann::json::parse( _getByKey(cursor, "table_names").second );
 
-            bool endOfData = false;
-
-            for( auto kv : this->_schema )
+            for(auto tn : tnj)
             {
-                _scanByKeyPrefix( "index_name_" + kv.first + "_",
-                                  cursor,
-                                  [this, kv](const std::string& prefix, const std::string& key, const std::string& val)->bool {
-                                      this->_schema[kv.first].push_back( val.substr( prefix.length() ) );
-                                  } );
+                auto tableName = tn.get<std::string>();
+
+                table_info ti;
+                auto rcj = nlohmann::json::parse(_getByKey(cursor, "regular_columns_" + tableName).second);
+                for(auto rc : rcj)
+                    ti.regular_columns.push_back(rc.get<std::string>());
+                auto icj = nlohmann::json::parse(_getByKey(cursor, "index_columns_" + tableName).second);
+                for(auto ic : icj)
+                    ti.index_columns.push_back(ic.get<std::string>());
+
+                auto cij = nlohmann::json::parse(_getByKey(cursor, "compound_indexes_" + tableName).second);
+                for(auto cic : cij)
+                {
+                    if(!cic.empty())
+                    {
+                        std::vector<std::string> idx;
+                        for(auto col : cic)
+                            idx.push_back(col.get<std::string>());
+                        ti.compound_indexes.push_back(idx);
+                    }
+                }
+
+                _schema[tableName] = ti;
             }
         } );
     }
@@ -354,10 +373,10 @@ public:
 
     static void create_database( const std::string& fileName,
                                  uint64_t size,
-                                 const std::map<std::string, std::vector<std::string>>& schema )
+                                 const std::string& schema )
     {
         MDB_env* env = NULL;
-        if( mdb_env_create( &env ) != 0 )
+        if(mdb_env_create(&env) != 0)
             throw std::runtime_error(("Unable to create lmdb environment."));
 
         try
@@ -374,27 +393,43 @@ public:
             _transaction( env, false, [schema]( MDB_txn* txn, MDB_dbi dbi, MDB_cursor* cursor ) {
                 _putByKey( txn, dbi, "database_version", "1" );
 
-                auto tables = schema.begin(), tablesEnd = schema.end();
-                for( ; tables != tablesEnd; ++tables )
+                auto j = nlohmann::json::parse(schema);
+
+                // [
+                //     {
+                //         "table_name": "segment_files",
+                //         "regular_columns": [ "sdp" ],
+                //         "index_columns": [ "start_time", "end_time", "segment_id" ]
+                //         "compound_indexes": [ [ "start_time", "segment_id" ] ]
+                //     }
+                // ]
+
+                auto tableNames = nlohmann::json::array({});
+
+                for(auto table : j)
                 {
-                    auto tableName = (*tables).first;
+                    auto tableName = table["table_name"].get<std::string>();
+                    tableNames.push_back(tableName);
 
-                    _putByKey( txn, dbi, "table_name_" + tableName, "table_name_" + tableName );
+                    if(table.find("regular_columns") != table.end())
+                        _putByKey( txn, dbi, "regular_columns_" + tableName, table["regular_columns"].dump() );
+                    else _putByKey( txn, dbi, "regular_columns_" + tableName, "[]");
 
-                    auto indexes = (*tables).second;
+                    if(table.find("index_columns") != table.end())
+                        _putByKey( txn, dbi, "index_columns_" + tableName, table["index_columns"].dump() );
+                    else _putByKey( txn, dbi, "index_columns_" + tableName, "[]");
 
-                    for( auto indexName : indexes )
-                    {
-                        std::string key = "index_name_" + tableName + "_" + indexName;
-                        _putByKey( txn, dbi, key, key );
-                    }
+                    if(table.find("compound_indexes") != table.end())
+                        _putByKey( txn, dbi, "compound_indexes_" + tableName, table["compound_indexes"].dump() );
+                    else _putByKey( txn, dbi, "compound_indexes_" + tableName, "[]");
 
                     _putByKey( txn, dbi, "next_pri_key_id_" + tableName, "1" );
                     _putByKey( txn, dbi, "last_insert_id_" + tableName, "0" );
                 }
+
+                _putByKey( txn, dbi, "table_names", tableNames.dump() );
             } );
 
-            mdb_env_close( env );
         }
         catch (...)
         {
@@ -403,24 +438,30 @@ public:
         }
     }
 
-    template<typename indexCB>
-    std::string insert( const std::string& tableName,
-                        const uint8_t* src, size_t size,
-                        indexCB icb )
+    std::string insert( const std::string& tableName, const std::string& row)
     {
         std::string newID;
         _transaction( _env, false, [&]( MDB_txn* txn, MDB_dbi dbi, MDB_cursor* cursor ) {
             newID = _getByKey( cursor, "next_pri_key_id_" + tableName ).second;
-            _putByKey( txn, dbi, tableName + "_" + newID, src, size );
+            _putByKey( txn, dbi, tableName + "_" + newID, row);
             _putByKey( txn, dbi, "last_insert_id_" + tableName, newID );
             _putByKey( txn, dbi, "next_pri_key_id_" + tableName, std::to_string( stoi(newID) + 1) );
 
-            auto indexes = _schema[tableName];
+            auto ti = _schema[tableName];
 
-            for( auto indexName : indexes )
+            auto j = nlohmann::json::parse(row);
+
+            for(auto indexName : ti.index_columns)
+                _putByKey( txn, dbi, "index_" + tableName + "_" + indexName + "_" + j[indexName].get<std::string>(), tableName + "_" + newID );
+
+            for(auto ci : ti.compound_indexes)
             {
-                std::string val = icb( indexName, src, size );
-                _putByKey( txn, dbi, "index_" + tableName + "_" + indexName + "_" + val, tableName + "_" + newID );
+                std::string key = "index_" + tableName;
+                for(auto idx : ci)
+                    key += "_" + idx;
+                for(auto idx : ci)
+                    key += "_" + j[idx].get<std::string>();
+                _putByKey( txn, dbi, key, tableName + "_" + newID );
             }
         } );
 
@@ -429,7 +470,20 @@ public:
 
     iterator get_iterator( const std::string& tableName, const std::string& index )
     {
-        return iterator( this, tableName, index );
+        auto indexes = nlohmann::json::parse( index );
+
+        std::string indexKey;
+        for(auto i : indexes)
+        {
+            indexKey += "_" + i.get<std::string>();
+        }
+
+        return iterator( this, tableName, indexKey );
+    }
+
+    iterator get_compound_iterator( const std::string& tableName, const std::string& ci )
+    {
+        return iterator( this, tableName, ci );
     }
 
     iterator get_primary_key_iterator(const std::string& tableName)
@@ -440,7 +494,7 @@ public:
 private:
     MDB_env* _env;
     uint32_t _version;
-    std::map<std::string, std::list<std::string>> _schema;
+    std::map<std::string, table_info> _schema;
 };
 
 }

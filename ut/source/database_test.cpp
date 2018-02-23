@@ -28,209 +28,187 @@ void database_test::teardown()
 
 void database_test::test_create()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segment_files", vector<string>{ "time", "foo" } ),
-        make_pair( "segments", vector<string>{ "start", "end", "sdp" } )
-    };
+    string schema = "[ { \"table_name\": \"segment_files\", \"regular_columns\": [], \"index_columns\": [ \"start_time\", \"end_time\", \"segment_id\" ] }, "
+                      "{ \"table_name\": \"segments\", \"regular_columns\": [ \"sdp\" ], \"index_columns\": [] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
     UT_ASSERT( ut_file_exists( "test.db" ) );
 
     database db( "test.db" );
-    UT_ASSERT( db._version = 1 );
-    UT_ASSERT( db._schema.size() == 2 );
-    UT_ASSERT( db._schema["segment_files"].size() == 2 );
-    auto found = std::find( db._schema["segment_files"].begin(), db._schema["segment_files"].end(), "time" );
-    UT_ASSERT( found != db._schema["segment_files"].end() );
-    found = std::find( db._schema["segment_files"].begin(), db._schema["segment_files"].end(), "foo" );
-    UT_ASSERT( found != db._schema["segment_files"].end() );
 
-    UT_ASSERT( db._schema["segments"].size() == 3 );
-    found = std::find( db._schema["segments"].begin(), db._schema["segments"].end(), "start" );
-    UT_ASSERT( found != db._schema["segments"].end() );
-    found = std::find( db._schema["segments"].begin(), db._schema["segments"].end(), "end" );
-    UT_ASSERT( found != db._schema["segments"].end() );
-    found = std::find( db._schema["segments"].begin(), db._schema["segments"].end(), "sdp" );
-    UT_ASSERT( found != db._schema["segments"].end() );
+    UT_ASSERT( db._schema.size() == 2 );
+    UT_ASSERT( db._schema["segment_files"].regular_columns.size() == 0 );
+    auto found = std::find( db._schema["segment_files"].index_columns.begin(), db._schema["segment_files"].index_columns.end(), "start_time" );
+    UT_ASSERT( found != db._schema["segment_files"].index_columns.end() );
+    found = std::find( db._schema["segment_files"].index_columns.begin(), db._schema["segment_files"].index_columns.end(), "end_time" );
+    UT_ASSERT( found != db._schema["segment_files"].index_columns.end() );
+    found = std::find( db._schema["segment_files"].index_columns.begin(), db._schema["segment_files"].index_columns.end(), "segment_id" );
+    UT_ASSERT( found != db._schema["segment_files"].index_columns.end() );
+
+    UT_ASSERT( db._schema["segments"].index_columns.size() == 0 );
+    found = std::find( db._schema["segments"].regular_columns.begin(), db._schema["segments"].regular_columns.end(), "sdp" );
+    UT_ASSERT( found != db._schema["segments"].regular_columns.end() );
 }
 
 void database_test::test_basic_insert()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segments", vector<string>{ "time" } )
-    };
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
     database db( "test.db" );
-    string val = "stick him with the pointy end";
-    db.insert( "segments", (uint8_t*)val.c_str(), val.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "1234";
-    } );
+    string val = "{ \"time\": \"1234\" }";
+    db.insert( "segments", val );
 
-    auto iter = db.get_iterator( "segments", "time" );
+    auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
     iter.find( "1234" );
     UT_ASSERT( iter.valid() );
-    auto res = iter.current_data();
-    string foundVal( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val );
+    UT_ASSERT( iter.current_data() == val);
 }
 
 void database_test::test_basic_iteration()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segments", vector<string>{ "time" } )
-    };
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
     database db( "test.db" );
 
-    string val1 = "Stick him with the pointy end.";
-    db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "100";
-    } );
+    string val1 = "{ \"time\": \"100\" }";
+    db.insert( "segments", val1);
 
-    string val2 = "Money buys a mans silence for a time. A bolt in the heart buys it forever.";
-    db.insert( "segments", (uint8_t*)val2.c_str(), val2.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "200";
-    } );
+    string val2 = "{ \"time\": \"200\" }";
+    db.insert( "segments", val2);
 
-    string val3 = "Some old wounds never truly heal, and bleed again at the slightest word.";
-    db.insert( "segments", (uint8_t*)val3.c_str(), val3.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "300";
-    } );
+    string val3 = "{ \"time\": \"300\" }";
+    db.insert( "segments", val3);
 
-    string val4 = "The lord of light wants his enemies burned. The drowned got wants them drowned. Why are all the Gods such vicious cunts? Where is the god of tits and wine?";
-    db.insert( "segments", (uint8_t*)val4.c_str(), val4.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "400";
-    } );
+    string val4 = "{ \"time\": \"400\" }";
+    db.insert( "segments", val4);
 
-    string val5 = "A mind needs books just like a sword needs whetstone.";
-    db.insert( "segments", (uint8_t*)val5.c_str(), val5.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "500";
-    } );
+    string val5 = "{ \"time\": \"500\" }";
+    db.insert( "segments", val5);
 
-    auto iter = db.get_iterator( "segments", "time" );
-    iter.find( "100" );
+    string val6 = "{ \"time\": \"600\" }";
+    db.insert( "segments", val6);
+
+    string val7 = "{ \"time\": \"700\" }";
+    db.insert( "segments", val7);
+
+    auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
+
+    iter.find( "500" );
     UT_ASSERT( iter.valid() );
-    auto res = iter.current_data();
-    string foundVal( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val1 );
+    UT_ASSERT(iter.current_data() == val5);
 
     iter.next();
     UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val2 );
+    UT_ASSERT(iter.current_data() == val6);
 
     iter.next();
     UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val3 );
+    UT_ASSERT(iter.current_data() == val7);
 
     iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val4 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val5 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() == false );
-
-    iter.find( "100" );
-    UT_ASSERT( iter.valid() == true );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val1 );
-
-    iter.prev();
-    UT_ASSERT( iter.valid() == false );
+    UT_ASSERT(iter.valid() == false);
 }
 
-void database_test::test_multiple_indexes()
+void database_test::test_primary_key_iteration()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segments", vector<string>{ "foo", "bar" } )
-    };
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
     database db( "test.db" );
 
-    string val1 = "Stick him with the pointy end.";
-    db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-        if( colName == "foo" )
-            return "100";
-        else return "A";
-    } );
+    string val1 = "{ \"time\": \"100\" }";
+    auto pk1 = db.insert( "segments", val1);
 
-    string val2 = "Money buys a mans silence for a time. A bolt in the heart buys it forever.";
-    db.insert( "segments", (uint8_t*)val2.c_str(), val2.length(), []( string colName, const uint8_t* src, size_t size ) {
-        if( colName == "foo" )
-            return "200";
-        else return "B";
-    } );
+    string val2 = "{ \"time\": \"200\" }";
+    auto pk2 = db.insert( "segments", val2);
 
-    string val3 = "Some old wounds never truly heal, and bleed again at the slightest word.";
-    db.insert( "segments", (uint8_t*)val3.c_str(), val3.length(), []( string colName, const uint8_t* src, size_t size ) {
-        if( colName == "foo" )
-            return "300";
-        else return "C";
-    } );
+    string val3 = "{ \"time\": \"300\" }";
+    auto pk3 = db.insert( "segments", val3);
 
-    string val4 = "The lord of light wants his enemies burned. The drowned got wants them drowned. Why are all the Gods such vicious cunts? Where is the god of tits and wine?";
-    db.insert( "segments", (uint8_t*)val4.c_str(), val4.length(), []( string colName, const uint8_t* src, size_t size ) {
-        if( colName == "foo" )
-            return "400";
-        else return "D";
-    } );
+    string val4 = "{ \"time\": \"400\" }";
+    auto pk4 = db.insert( "segments", val4);
 
-    string val5 = "A mind needs books just like a sword needs whetstone.";
-    db.insert( "segments", (uint8_t*)val5.c_str(), val5.length(), []( string colName, const uint8_t* src, size_t size ) {
-        if( colName == "foo" )
-            return "500";
-        else return "E";
-    } );
+    string val5 = "{ \"time\": \"500\" }";
+    auto pk5 = db.insert( "segments", val5);
+
+    string val6 = "{ \"time\": \"600\" }";
+    auto pk6 = db.insert( "segments", val6);
+
+    string val7 = "{ \"time\": \"700\" }";
+    auto pk7 = db.insert( "segments", val7);
+
+    auto iter = db.get_primary_key_iterator( "segments" );
+
+    iter.find( pk1 );
+    UT_ASSERT( iter.valid() );
+    UT_ASSERT(iter.current_data() == val1);
+
+    iter.next();
+    UT_ASSERT( iter.valid() );
+    UT_ASSERT(iter.current_data() == val2);
+
+    iter.find(pk7);
+    UT_ASSERT( iter.valid() );
+    UT_ASSERT(iter.current_data() == val7);
+
+    iter.next();
+    UT_ASSERT(iter.valid() == false);
+}
+void database_test::test_multiple_indexes()
+{
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\", \"index\" ] } ]";
+
+    database::create_database( "test.db", 16 * (1024*1024), schema );
+
+    database db( "test.db" );
+
+    string val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
+    auto pk1 = db.insert( "segments", val1);
+
+    string val2 = "{ \"time\": \"200\", \"index\": \"6\" }";
+    auto pk2 = db.insert( "segments", val2);
+
+    string val3 = "{ \"time\": \"300\", \"index\": \"5\" }";
+    auto pk3 = db.insert( "segments", val3);
+
+    string val4 = "{ \"time\": \"400\", \"index\": \"4\" }";
+    auto pk4 = db.insert( "segments", val4);
+
+    string val5 = "{ \"time\": \"500\", \"index\": \"3\" }";
+    auto pk5 = db.insert( "segments", val5);
+
+    string val6 = "{ \"time\": \"600\", \"index\": \"2\" }";
+    auto pk6 = db.insert( "segments", val6);
+
+    string val7 = "{ \"time\": \"700\", \"index\": \"1\" }";
+    auto pk7 = db.insert( "segments", val7);
 
     {
-        auto fooIter = db.get_iterator( "segments", "foo" );
-        fooIter.find( "100" );
-        UT_ASSERT( fooIter.valid() );
-        auto res = fooIter.current_data();
-        string foundVal( (char*)res.first, res.second );
-        UT_ASSERT( foundVal == val1 );
+        auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
+
+        iter.find( "700" );
+        UT_ASSERT( iter.valid() );
+        UT_ASSERT(iter.current_data() == val7);
     }
 
     {
-        auto barIter = db.get_iterator( "segments", "bar" );
-        barIter.find( "D" );
-        UT_ASSERT( barIter.valid() );
-        auto res = barIter.current_data();
-        string foundVal( (char*)res.first, res.second );
-        UT_ASSERT( foundVal == val4 );
+        auto iter = db.get_iterator( "segments", "[ \"index\" ]" );
+
+        iter.find( "7" );
+        UT_ASSERT( iter.valid() );
+        UT_ASSERT(iter.current_data() == val1);
     }
 }
 
 void database_test::test_swmr()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segments", vector<string>{ "foo" } )
-    };
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"foo\" ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
@@ -242,10 +220,8 @@ void database_test::test_swmr()
     thread wt([&](){
         while( writerRunning )
         {
-            string val = ut_uuid_generate();
-            db.insert( "segments", (uint8_t*)val.c_str(), val.length(), [writerIndex]( string colName, const uint8_t* src, size_t size ) {
-               return to_string(writerIndex);
-            });
+            string val = "{ \"foo\": \"" + to_string(writerIndex) + "\" }";
+            db.insert( "segments", val );
             ++writerIndex;
             ut_usleep( 10000 );
         }
@@ -267,7 +243,7 @@ void database_test::test_swmr()
             if( writerIndex > 0 )
             {
                 string target = to_string( random() % writerIndex );
-                auto iter = db.get_iterator( "segments", "foo" );
+                auto iter = db.get_iterator( "segments", "[ \"foo\" ]" );
                 iter.find( target );
                 if( iter.valid() )
                 {
@@ -288,7 +264,7 @@ void database_test::test_swmr()
             if( writerIndex > 0 )
             {
                 string target = to_string( random() % writerIndex );
-                auto iter = db.get_iterator( "segments", "foo" );
+                auto iter = db.get_iterator( "segments", "[ \"foo\" ]" );
                 iter.find( target );
                 if( iter.valid() )
                 {
@@ -314,9 +290,7 @@ void database_test::test_swmr()
 
 void database_test::test_mwmr()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segment_files", vector<string>{ "start_time", "end_time" } )
-    };
+    std::string schema = "[ { \"table_name\": \"segment_files\", \"index_columns\": [ \"start_time\", \"end_time\" ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
@@ -339,10 +313,8 @@ void database_test::test_mwmr()
         wc.wt = thread( [&](){
             while( wc.writer_running )
             {
-                string val = ut_uuid_generate();
-                db.insert( "segment_files", (uint8_t*)val.c_str(), val.length(), [&]( string colName, const uint8_t* src, size_t size ) {
-                   return to_string(wc.start_time);
-                });
+                string val = "{ \"start_time\": \"" + to_string(wc.start_time) + "\", \"end_time\": \"" + to_string(wc.start_time) + "\" }";
+                db.insert( "segment_files", val );
                 ++wc.start_time;
                 ut_usleep( 1 );
             }
@@ -373,7 +345,7 @@ void database_test::test_mwmr()
                 if( writerContexts[rc.writer_index].start_time > 0 )
                 {
                     string target = to_string( random() % writerContexts[rc.writer_index].start_time );
-                    auto iter = db.get_iterator( "segment_files", "start_time" );
+                    auto iter = db.get_iterator( "segment_files", "[ \"start_time\" ]" );
                     iter.find( target );
                     if( iter.valid() )
                     {
@@ -410,86 +382,33 @@ void database_test::test_mwmr()
     fflush(stdout);
 }
 
-void database_test::test_primary_key_iteration()
+
+void database_test::test_scenario()
 {
-    map<string,vector<string>> schema = {
-        make_pair( "segments", vector<string>{ "time" } )
-    };
+}
+
+void database_test::test_compound_indexes()
+{
+    std::string schema = "[ { \"table_name\": \"segments\", \"compound_indexes\": [ [ \"index\", \"time\" ] ] } ]";
 
     database::create_database( "test.db", 16 * (1024*1024), schema );
 
     database db( "test.db" );
 
-    string val1 = "Stick him with the pointy end.";
-    auto pk1 = db.insert( "segments", (uint8_t*)val1.c_str(), val1.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "100";
-    } );
+    string val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
+    auto pk1 = db.insert( "segments", val1);
 
-    string val2 = "Money buys a mans silence for a time. A bolt in the heart buys it forever.";
-    auto pk2 = db.insert( "segments", (uint8_t*)val2.c_str(), val2.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "200";
-    } );
+    string val2 = "{ \"time\": \"200\", \"index\": \"7\" }";
+    auto pk2 = db.insert( "segments", val2);
 
-    string val3 = "Some old wounds never truly heal, and bleed again at the slightest word.";
-    auto pk3 = db.insert( "segments", (uint8_t*)val3.c_str(), val3.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "300";
-    } );
+    string val3 = "{ \"time\": \"300\", \"index\": \"8\" }";
+    auto pk3 = db.insert( "segments", val3);
 
-    string val4 = "The lord of light wants his enemies burned. The drowned got wants them drowned. Why are all the Gods such vicious cunts? Where is the god of tits and wine?";
-    auto pk4 = db.insert( "segments", (uint8_t*)val4.c_str(), val4.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "400";
-    } );
+    auto ci = db.get_iterator("segments", "[ \"index\", \"time\" ]");
 
-    string val5 = "A mind needs books just like a sword needs whetstone.";
-    auto pk5 = db.insert( "segments", (uint8_t*)val5.c_str(), val5.length(), []( string colName, const uint8_t* src, size_t size ) {
-        UT_ASSERT( colName == "time" );
-        return "500";
-    } );
+    ci.find("7_200");
 
-    auto iter = db.get_primary_key_iterator( "segments" );
-    iter.find( pk1 );
-    UT_ASSERT( iter.valid() );
-    auto res = iter.current_data();
-    string foundVal( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val1 );
+    auto row = ci.current_data();
 
-    iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val2 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val3 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val4 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val5 );
-
-    iter.next();
-    UT_ASSERT( iter.valid() == false );
-
-    iter.find( pk1 );
-    UT_ASSERT( iter.valid() == true );
-    res = iter.current_data();
-    foundVal = string( (char*)res.first, res.second );
-    UT_ASSERT( foundVal == val1 );
-
-    iter.prev();
-    UT_ASSERT( iter.valid() == false );
+    UT_ASSERT(row == val2);
 }
