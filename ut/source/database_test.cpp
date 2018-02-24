@@ -61,7 +61,7 @@ void database_test::test_basic_insert()
     string val = "{ \"time\": \"1234\" }";
     db.insert( "segments", val );
 
-    auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
+    auto iter = db.get_iterator( "segments", "time" );
     iter.find( "1234" );
     UT_ASSERT( iter.valid() );
     UT_ASSERT( iter.current_data() == val);
@@ -96,7 +96,7 @@ void database_test::test_basic_iteration()
     string val7 = "{ \"time\": \"700\" }";
     db.insert( "segments", val7);
 
-    auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
+    auto iter = db.get_iterator( "segments", "time" );
 
     iter.find( "500" );
     UT_ASSERT( iter.valid() );
@@ -190,7 +190,7 @@ void database_test::test_multiple_indexes()
     auto pk7 = db.insert( "segments", val7);
 
     {
-        auto iter = db.get_iterator( "segments", "[ \"time\" ]" );
+        auto iter = db.get_iterator( "segments", "time" );
 
         iter.find( "700" );
         UT_ASSERT( iter.valid() );
@@ -198,7 +198,7 @@ void database_test::test_multiple_indexes()
     }
 
     {
-        auto iter = db.get_iterator( "segments", "[ \"index\" ]" );
+        auto iter = db.get_iterator( "segments", "index" );
 
         iter.find( "7" );
         UT_ASSERT( iter.valid() );
@@ -243,7 +243,7 @@ void database_test::test_swmr()
             if( writerIndex > 0 )
             {
                 string target = to_string( random() % writerIndex );
-                auto iter = db.get_iterator( "segments", "[ \"foo\" ]" );
+                auto iter = db.get_iterator( "segments", "foo" );
                 iter.find( target );
                 if( iter.valid() )
                 {
@@ -264,7 +264,7 @@ void database_test::test_swmr()
             if( writerIndex > 0 )
             {
                 string target = to_string( random() % writerIndex );
-                auto iter = db.get_iterator( "segments", "[ \"foo\" ]" );
+                auto iter = db.get_iterator( "segments", "foo" );
                 iter.find( target );
                 if( iter.valid() )
                 {
@@ -345,7 +345,7 @@ void database_test::test_mwmr()
                 if( writerContexts[rc.writer_index].start_time > 0 )
                 {
                     string target = to_string( random() % writerContexts[rc.writer_index].start_time );
-                    auto iter = db.get_iterator( "segment_files", "[ \"start_time\" ]" );
+                    auto iter = db.get_iterator( "segment_files", "start_time" );
                     iter.find( target );
                     if( iter.valid() )
                     {
@@ -404,9 +404,9 @@ void database_test::test_compound_indexes()
     string val3 = "{ \"time\": \"300\", \"index\": \"8\" }";
     auto pk3 = db.insert( "segments", val3);
 
-    auto ci = db.get_iterator("segments", "[ \"index\", \"time\" ]");
+    auto ci = db.get_iterator("segments", vector<string>{ "index", "time" });
 
-    ci.find("7_200");
+    ci.find(vector<string>{"7", "200"});
 
     auto row = ci.current_data();
 

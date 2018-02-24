@@ -216,6 +216,17 @@ public:
             }
         }
 
+        void find(const std::vector<std::string>& vals)
+        {
+            std::string cv;
+            for(auto v : vals)
+                cv += "_" + v;
+
+            auto key = "index_" + _tableName + _index + cv;
+            auto prefix = "index_" + _tableName + _index;
+            _set_cursor(key, prefix);
+        }
+
         void next()
         {
             if( !_validIterator )
@@ -430,6 +441,7 @@ public:
                 _putByKey( txn, dbi, "table_names", tableNames.dump() );
             } );
 
+            mdb_env_close(env);
         }
         catch (...)
         {
@@ -468,22 +480,18 @@ public:
         return newID;
     }
 
-    iterator get_iterator( const std::string& tableName, const std::string& index )
+
+    iterator get_iterator( const std::string& tableName, const std::vector<std::string>& indexes )
     {
-        auto indexes = nlohmann::json::parse( index );
-
         std::string indexKey;
-        for(auto i : indexes)
-        {
-            indexKey += "_" + i.get<std::string>();
-        }
-
-        return iterator( this, tableName, indexKey );
+        for(auto idx : indexes)
+            indexKey += "_" + idx;
+        return iterator(this, tableName, indexKey);
     }
 
-    iterator get_compound_iterator( const std::string& tableName, const std::string& ci )
+    iterator get_iterator( const std::string& tableName, const std::string& index )
     {
-        return iterator( this, tableName, ci );
+        return iterator( this, tableName, "_" + index );
     }
 
     iterator get_primary_key_iterator(const std::string& tableName)

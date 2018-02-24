@@ -149,5 +149,9 @@ int main( int argc, char* argv[] )
         i++;
     }
 
+    printf("Press enter to continue.\n");
+    fflush(stdout);
+    system("/usr/bin/read");
+
     return 0;
 }
