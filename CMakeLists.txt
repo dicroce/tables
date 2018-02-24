@@ -32,8 +32,8 @@ include_directories(
 
 add_library(
     tables_static STATIC
-    include/tables/database.h
-    source/database.cpp
+    include/tables/json_database.h
+    source/json_database.cpp
 )
 
 target_link_libraries(tables_static lmdb_static)
@@ -44,8 +44,8 @@ add_dependencies(tables_static lmdb_library)
 
 add_library(
     tables SHARED
-    include/tables/database.h
-    source/database.cpp
+    include/tables/json_database.h
+    source/json_database.cpp
 )
 
 target_link_libraries(tables lmdb)
@@ -55,9 +55,9 @@ add_dependencies(tables lmdb_library)
 # unit test...
 
 add_executable(ut ut/include/framework.h
-                  ut/include/database_test.h
+                  ut/include/json_database_test.h
                   ut/source/framework.cpp
-                  ut/source/database_test.cpp)
+                  ut/source/json_database_test.cpp)
 
 target_link_libraries(ut tables_static uuid pthread)
 

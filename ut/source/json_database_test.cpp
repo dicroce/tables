@@ -1,6 +1,6 @@
 
-#include "database_test.h"
-#include "tables/database.h"
+#include "json_database_test.h"
+#include "tables/json_database.h"
 #include <algorithm>
 #include <thread>
 #include <mutex>
@@ -8,9 +8,9 @@
 using namespace std;
 using namespace tables;
 
-REGISTER_TEST_FIXTURE(database_test);
+REGISTER_TEST_FIXTURE(json_database_test);
 
-void database_test::setup()
+void json_database_test::setup()
 {
     if( ut_file_exists("test.db") )
         ut_file_unlink( "test.db" );
@@ -18,7 +18,7 @@ void database_test::setup()
         ut_file_unlink( "test.db-lock" );
 }
 
-void database_test::teardown()
+void json_database_test::teardown()
 {
     if( ut_file_exists("test.db") )
         ut_file_unlink( "test.db" );
@@ -26,16 +26,16 @@ void database_test::teardown()
         ut_file_unlink( "test.db-lock" );
 }
 
-void database_test::test_create()
+void json_database_test::test_create()
 {
     string schema = "[ { \"table_name\": \"segment_files\", \"regular_columns\": [], \"index_columns\": [ \"start_time\", \"end_time\", \"segment_id\" ] }, "
                       "{ \"table_name\": \"segments\", \"regular_columns\": [ \"sdp\" ], \"index_columns\": [] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
     UT_ASSERT( ut_file_exists( "test.db" ) );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
     UT_ASSERT( db._schema.size() == 2 );
     UT_ASSERT( db._schema["segment_files"].regular_columns.size() == 0 );
@@ -51,15 +51,19 @@ void database_test::test_create()
     UT_ASSERT( found != db._schema["segments"].regular_columns.end() );
 }
 
-void database_test::test_basic_insert()
+void json_database_test::test_basic_insert()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
-    string val = "{ \"time\": \"1234\" }";
-    db.insert( "segments", val );
+    json_database db( "test.db" );
+
+    string val;
+    db.transaction([&](trans_state& ts){
+        val = "{ \"time\": \"1234\" }";
+        db.insert_json( ts, "segments", val );
+    });
 
     auto iter = db.get_iterator( "segments", "time" );
     iter.find( "1234" );
@@ -67,34 +71,38 @@ void database_test::test_basic_insert()
     UT_ASSERT( iter.current_data() == val);
 }
 
-void database_test::test_basic_iteration()
+void json_database_test::test_basic_iteration()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
-    string val1 = "{ \"time\": \"100\" }";
-    db.insert( "segments", val1);
+    string val1, val2, val3, val4, val5, val6, val7;
 
-    string val2 = "{ \"time\": \"200\" }";
-    db.insert( "segments", val2);
+    db.transaction([&](trans_state& ts) {
+        val1 = "{ \"time\": \"100\" }";
+        db.insert_json( ts, "segments", val1);
 
-    string val3 = "{ \"time\": \"300\" }";
-    db.insert( "segments", val3);
+        val2 = "{ \"time\": \"200\" }";
+        db.insert_json( ts, "segments", val2);
 
-    string val4 = "{ \"time\": \"400\" }";
-    db.insert( "segments", val4);
+        val3 = "{ \"time\": \"300\" }";
+        db.insert_json( ts, "segments", val3);
 
-    string val5 = "{ \"time\": \"500\" }";
-    db.insert( "segments", val5);
+        val4 = "{ \"time\": \"400\" }";
+        db.insert_json( ts, "segments", val4);
 
-    string val6 = "{ \"time\": \"600\" }";
-    db.insert( "segments", val6);
+        val5 = "{ \"time\": \"500\" }";
+        db.insert_json( ts, "segments", val5);
 
-    string val7 = "{ \"time\": \"700\" }";
-    db.insert( "segments", val7);
+        val6 = "{ \"time\": \"600\" }";
+        db.insert_json( ts, "segments", val6);
+
+        val7 = "{ \"time\": \"700\" }";
+        db.insert_json( ts, "segments", val7);
+    });
 
     auto iter = db.get_iterator( "segments", "time" );
 
@@ -114,34 +122,39 @@ void database_test::test_basic_iteration()
     UT_ASSERT(iter.valid() == false);
 }
 
-void database_test::test_primary_key_iteration()
+void json_database_test::test_primary_key_iteration()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
-    string val1 = "{ \"time\": \"100\" }";
-    auto pk1 = db.insert( "segments", val1);
+    string val1, val2, val3, val4, val5, val6, val7, pk1, pk2, pk3, pk4, pk5, pk6, pk7;
 
-    string val2 = "{ \"time\": \"200\" }";
-    auto pk2 = db.insert( "segments", val2);
+    db.transaction([&](trans_state& ts) {
 
-    string val3 = "{ \"time\": \"300\" }";
-    auto pk3 = db.insert( "segments", val3);
+        val1 = "{ \"time\": \"100\" }";
+        pk1 = db.insert_json( ts, "segments", val1);
 
-    string val4 = "{ \"time\": \"400\" }";
-    auto pk4 = db.insert( "segments", val4);
+        val2 = "{ \"time\": \"200\" }";
+        pk2 = db.insert_json( ts, "segments", val2);
 
-    string val5 = "{ \"time\": \"500\" }";
-    auto pk5 = db.insert( "segments", val5);
+        val3 = "{ \"time\": \"300\" }";
+        pk3 = db.insert_json( ts, "segments", val3);
 
-    string val6 = "{ \"time\": \"600\" }";
-    auto pk6 = db.insert( "segments", val6);
+        val4 = "{ \"time\": \"400\" }";
+        pk4 = db.insert_json( ts, "segments", val4);
 
-    string val7 = "{ \"time\": \"700\" }";
-    auto pk7 = db.insert( "segments", val7);
+        val5 = "{ \"time\": \"500\" }";
+        pk5 = db.insert_json( ts, "segments", val5);
+
+        val6 = "{ \"time\": \"600\" }";
+        pk6 = db.insert_json( ts, "segments", val6);
+
+        val7 = "{ \"time\": \"700\" }";
+        pk7 = db.insert_json( ts, "segments", val7);
+    });
 
     auto iter = db.get_primary_key_iterator( "segments" );
 
@@ -160,34 +173,38 @@ void database_test::test_primary_key_iteration()
     iter.next();
     UT_ASSERT(iter.valid() == false);
 }
-void database_test::test_multiple_indexes()
+void json_database_test::test_multiple_indexes()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\", \"index\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
-    string val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
-    auto pk1 = db.insert( "segments", val1);
+    string val1, val2, val3, val4, val5, val6, val7, pk1, pk2, pk3, pk4, pk5, pk6, pk7;
 
-    string val2 = "{ \"time\": \"200\", \"index\": \"6\" }";
-    auto pk2 = db.insert( "segments", val2);
+    db.transaction([&](trans_state& ts) {
+        val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
+        pk1 = db.insert_json( ts, "segments", val1);
 
-    string val3 = "{ \"time\": \"300\", \"index\": \"5\" }";
-    auto pk3 = db.insert( "segments", val3);
+        val2 = "{ \"time\": \"200\", \"index\": \"6\" }";
+        pk2 = db.insert_json( ts, "segments", val2);
 
-    string val4 = "{ \"time\": \"400\", \"index\": \"4\" }";
-    auto pk4 = db.insert( "segments", val4);
+        val3 = "{ \"time\": \"300\", \"index\": \"5\" }";
+        pk3 = db.insert_json( ts, "segments", val3);
 
-    string val5 = "{ \"time\": \"500\", \"index\": \"3\" }";
-    auto pk5 = db.insert( "segments", val5);
+        val4 = "{ \"time\": \"400\", \"index\": \"4\" }";
+        pk4 = db.insert_json( ts, "segments", val4);
 
-    string val6 = "{ \"time\": \"600\", \"index\": \"2\" }";
-    auto pk6 = db.insert( "segments", val6);
+        val5 = "{ \"time\": \"500\", \"index\": \"3\" }";
+        pk5 = db.insert_json( ts, "segments", val5);
 
-    string val7 = "{ \"time\": \"700\", \"index\": \"1\" }";
-    auto pk7 = db.insert( "segments", val7);
+        val6 = "{ \"time\": \"600\", \"index\": \"2\" }";
+        pk6 = db.insert_json( ts, "segments", val6);
+
+        val7 = "{ \"time\": \"700\", \"index\": \"1\" }";
+        pk7 = db.insert_json( ts, "segments", val7);
+    });
 
     {
         auto iter = db.get_iterator( "segments", "time" );
@@ -206,13 +223,13 @@ void database_test::test_multiple_indexes()
     }
 }
 
-void database_test::test_swmr()
+void json_database_test::test_swmr()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"foo\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
     bool writerRunning = true;
     uint32_t writerIndex = 0;
@@ -220,8 +237,10 @@ void database_test::test_swmr()
     thread wt([&](){
         while( writerRunning )
         {
-            string val = "{ \"foo\": \"" + to_string(writerIndex) + "\" }";
-            db.insert( "segments", val );
+            db.transaction([&](trans_state& ts) {
+                string val = "{ \"foo\": \"" + to_string(writerIndex) + "\" }";
+                db.insert_json( ts, "segments", val );
+            });
             ++writerIndex;
             ut_usleep( 10000 );
         }
@@ -288,13 +307,13 @@ void database_test::test_swmr()
     wt.join();
 }
 
-void database_test::test_mwmr()
+void json_database_test::test_mwmr()
 {
     std::string schema = "[ { \"table_name\": \"segment_files\", \"index_columns\": [ \"start_time\", \"end_time\" ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
     struct writer_context
     {
@@ -313,8 +332,10 @@ void database_test::test_mwmr()
         wc.wt = thread( [&](){
             while( wc.writer_running )
             {
-                string val = "{ \"start_time\": \"" + to_string(wc.start_time) + "\", \"end_time\": \"" + to_string(wc.start_time) + "\" }";
-                db.insert( "segment_files", val );
+                db.transaction([&](trans_state& ts) {
+                    string val = "{ \"start_time\": \"" + to_string(wc.start_time) + "\", \"end_time\": \"" + to_string(wc.start_time) + "\" }";
+                    db.insert_json( ts, "segment_files", val );
+                });
                 ++wc.start_time;
                 ut_usleep( 1 );
             }
@@ -382,27 +403,30 @@ void database_test::test_mwmr()
     fflush(stdout);
 }
 
-
-void database_test::test_scenario()
+void json_database_test::test_scenario()
 {
 }
 
-void database_test::test_compound_indexes()
+void json_database_test::test_compound_indexes()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"compound_indexes\": [ [ \"index\", \"time\" ] ] } ]";
 
-    database::create_database( "test.db", 16 * (1024*1024), schema );
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
 
-    database db( "test.db" );
+    json_database db( "test.db" );
 
-    string val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
-    auto pk1 = db.insert( "segments", val1);
+    string val1, val2, val3, pk1, pk2, pk3;
 
-    string val2 = "{ \"time\": \"200\", \"index\": \"7\" }";
-    auto pk2 = db.insert( "segments", val2);
+    db.transaction([&](trans_state& ts) {
+        val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
+        pk1 = db.insert_json( ts, "segments", val1);
 
-    string val3 = "{ \"time\": \"300\", \"index\": \"8\" }";
-    auto pk3 = db.insert( "segments", val3);
+        val2 = "{ \"time\": \"200\", \"index\": \"7\" }";
+        pk2 = db.insert_json( ts, "segments", val2);
+
+        val3 = "{ \"time\": \"300\", \"index\": \"8\" }";
+        pk3 = db.insert_json( ts, "segments", val3);
+    });
 
     auto ci = db.get_iterator("segments", vector<string>{ "index", "time" });
 
