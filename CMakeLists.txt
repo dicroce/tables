@@ -33,7 +33,9 @@ include_directories(
 add_library(
     tables_static STATIC
     include/tables/json_database.h
+    include/tables/utils.h
     source/json_database.cpp
+    source/utils.cpp
 )
 
 target_link_libraries(tables_static lmdb_static)
@@ -45,7 +47,9 @@ add_dependencies(tables_static lmdb_library)
 add_library(
     tables SHARED
     include/tables/json_database.h
+    include/tables/utils.h
     source/json_database.cpp
+    source/utils.cpp
 )
 
 target_link_libraries(tables lmdb)

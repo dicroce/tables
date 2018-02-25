@@ -156,7 +156,7 @@ void json_database_test::test_primary_key_iteration()
         pk7 = db.insert_json( ts, "segments", val7);
     });
 
-    auto iter = db.get_primary_key_iterator( "segments" );
+    auto iter = db.get_pk_iterator( "segments" );
 
     iter.find( pk1 );
     UT_ASSERT( iter.valid() );
@@ -266,8 +266,8 @@ void json_database_test::test_swmr()
                 iter.find( target );
                 if( iter.valid() )
                 {
-                    string key = iter.current_key();
-                    UT_ASSERT( key.find(target) != string::npos );
+                    string key = iter.current_pk();
+                    UT_ASSERT( !key.empty() );
                     ++r1Reads;
                     ut_usleep( 1000 );
                 }
@@ -287,8 +287,8 @@ void json_database_test::test_swmr()
                 iter.find( target );
                 if( iter.valid() )
                 {
-                    string key = iter.current_key();
-                    UT_ASSERT( key.find(target) != string::npos );
+                    string key = iter.current_pk();
+                    UT_ASSERT( !key.empty() );
                     ++r2Reads;
                     ut_usleep( 1000 );
                 }
@@ -370,8 +370,8 @@ void json_database_test::test_mwmr()
                     iter.find( target );
                     if( iter.valid() )
                     {
-                        string key = iter.current_key();
-                        UT_ASSERT( key.find(target) != string::npos );
+                        string key = iter.current_pk();
+                        UT_ASSERT( !key.empty() );
                         ++rc.reads;
                         ut_usleep( 1 );
                     }
@@ -435,4 +435,8 @@ void json_database_test::test_compound_indexes()
     auto row = ci.current_data();
 
     UT_ASSERT(row == val2);
+
+    db.transaction([&](trans_state& ts){
+        db.remove(ts, "segments", pk2);
+    });
 }

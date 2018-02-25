@@ -5,22 +5,19 @@
 //
 // TODO
 //
-// - Remove any numeric limitations (uint64_t for auto index, etc).
 // - db upgrades
 //   - function for updating a row (so you can add or remove columns)
 //   - indexes
 //     - deleting an existing index
 //     - adding an index
 //   - function for renaming a table
-// - Transactions
-//   - instead of a transaction being internal, allow it to be external.
-//     - all inserts and deletes must occur inside a transaction callback.
 // - Verify reader threads can have their own db object (with its own iterators).
 //   - We need at leaat 1 write + multiple readers... but multiple writers would help.
 //
 
 #include "liblmdb/lmdb.h"
 #include "tables/json.h"
+#include "tables/utils.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -33,115 +30,6 @@ class json_database_test;
 
 namespace tables
 {
-
-struct trans_state
-{
-    MDB_txn* txn {NULL};
-    MDB_dbi dbi;
-    MDB_cursor* cursor {NULL};
-};
-
-template<typename rangeCB>
-void _scanByKeyPrefix(const std::string& keyPrefix, MDB_cursor* cursor, rangeCB rcb)
-{
-    MDB_val shimKey, shimVal;
-
-    shimKey.mv_size = keyPrefix.length();
-    shimKey.mv_data = const_cast<char*>(keyPrefix.c_str());
-
-    if(mdb_cursor_get(cursor, &shimKey, &shimVal, MDB_SET_RANGE) != 0)
-        throw std::runtime_error(("Unable to locate key in scan."));
-
-    bool endOfData = false;
-
-    do
-    {
-        // two ways out of this loop: 1) finding a value that doesn't start with "table_name_"
-        // 2) hitting the end of data in the db.
-        std::string key((char*)shimKey.mv_data, shimKey.mv_size);
-        std::string val((char*)shimVal.mv_data, shimVal.mv_size);
-
-        if(key.compare(0, keyPrefix.length(), keyPrefix) == 0)
-            rcb(keyPrefix, key, val);
-        else break;
-
-        if(mdb_cursor_get(cursor, &shimKey, &shimVal, MDB_NEXT) == MDB_NOTFOUND)
-            endOfData = true;
-    } while(!endOfData);
-}
-
-std::pair<std::string, std::string> _getByKey(MDB_cursor* cursor, const std::string& key)
-{
-    MDB_val shimKey, shimVal;
-
-    shimKey.mv_size = key.length();
-    shimKey.mv_data = const_cast<char*>(key.c_str());
-
-    if(mdb_cursor_get(cursor, &shimKey, &shimVal, MDB_SET) != 0)
-        throw std::runtime_error(("Unable to locate key: %s",key.c_str()));
-
-    return std::make_pair(key, std::string((char*)shimVal.mv_data, shimVal.mv_size));
-}
-
-void _putByKey(MDB_txn* txn, MDB_dbi& dbi, const std::string& key, const std::string& val)
-{
-    MDB_val keyShim;
-    keyShim.mv_size = key.length();
-    keyShim.mv_data = const_cast<char*>(key.c_str());
-
-    MDB_val valShim;
-    valShim.mv_size = val.length();
-    valShim.mv_data = const_cast<char*>(val.c_str());
-
-    if(mdb_put(txn, dbi, &keyShim, &valShim, 0) != 0)
-        throw std::runtime_error(("Unable to mdb_put() " + key));
-}
-
-void _putByKey(MDB_txn* txn, MDB_dbi& dbi, const std::string& key, const uint8_t* src, size_t size)
-{
-    MDB_val keyShim;
-    keyShim.mv_size = key.length();
-    keyShim.mv_data = const_cast<char*>(key.c_str());
-
-    MDB_val valShim;
-    valShim.mv_size = size;
-    valShim.mv_data = const_cast<uint8_t*>(src);
-
-    if(mdb_put(txn, dbi, &keyShim, &valShim, 0) != 0)
-        throw std::runtime_error(("Unable to mdb_put() " + key));
-}
-
-template<typename bodyCB>
-void _transaction(MDB_env* env, bool readOnly, bodyCB f)
-{
-    trans_state ts;
-
-    try
-    {
-        if(mdb_txn_begin(env, NULL, (readOnly)?MDB_RDONLY:0, &ts.txn) != 0)
-            throw std::runtime_error(("Unable to create transaction."));
-
-        if(mdb_dbi_open(ts.txn, NULL, 0, &ts.dbi) != 0)
-            throw std::runtime_error(("Unable to open/create json_database."));
-
-        if(mdb_cursor_open(ts.txn, ts.dbi, &ts.cursor) != 0)
-            throw std::runtime_error(("Unable to open cursor."));
-
-        f(ts);
-
-        mdb_cursor_close(ts.cursor);
-
-        mdb_txn_commit(ts.txn);
-    }
-    catch (...)
-    {
-        if(ts.cursor)
-            mdb_cursor_close(ts.cursor);
-        if(ts.txn)
-            mdb_txn_abort(ts.txn);
-        throw;
-    }
-}
 
 struct table_info
 {
@@ -167,7 +55,8 @@ public:
             _indexCursor(NULL),
             _validIterator(false),
             _shimKey(),
-            _shimVal()
+            _shimVal(),
+            _closed(false)
         {
             if(mdb_txn_begin(db->_env, NULL, MDB_RDONLY, &_txn) != 0)
                 throw std::runtime_error(("Unable to create transaction."));
@@ -188,12 +77,14 @@ public:
             _indexCursor(std::move(obj._indexCursor)),
             _validIterator(std::move(obj._validIterator)),
             _shimKey(std::move(obj._shimKey)),
-            _shimVal(std::move(obj._shimVal))
+            _shimVal(std::move(obj._shimVal)),
+            _closed(std::move(obj._closed))
         {
             obj._db = NULL;
             obj._txn = NULL;
             obj._indexCursor = NULL;
             obj._validIterator = false;
+            obj._closed = true;
         }
 
         ~iterator() noexcept
@@ -220,11 +111,17 @@ public:
             obj._validIterator = false;
             _shimKey = std::move(obj._shimKey);
             _shimVal = std::move(obj._shimVal);
+            _closed = std::move(obj._closed);
+            obj._closed = true;
+
             return *this;
         }
 
         void find(const std::string& val)
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to find() on close()d iterators."));
+
             if(_index.empty())
             {
                 auto key = _tableName + "_" + val;
@@ -241,6 +138,9 @@ public:
 
         void find(const std::vector<std::string>& vals)
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to find() on close()d iterators."));
+
             std::string cv;
             for(auto v : vals)
                 cv += "_" + v;
@@ -252,6 +152,9 @@ public:
 
         void next()
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to next() on close()d iterators."));
+
             if(!_validIterator)
                 throw std::runtime_error(("Invalid iterator!"));
 
@@ -262,6 +165,9 @@ public:
 
         void prev()
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to prev() on close()d iterators."));
+
             if(!_validIterator)
                 throw std::runtime_error(("Invalid iterator!"));
 
@@ -270,21 +176,32 @@ public:
             _prev_cursor(prefix);
         }
 
-        bool valid()
+        bool valid() const
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to valid() on close()d iterators."));
+
             return _validIterator;
         }
 
-        std::string current_key()
+        std::string current_pk() const
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to current_pk() on close()d iterators."));
+
             if(!_validIterator)
                 throw std::runtime_error(("Invalid iterator!"));
 
-            return std::string((char*)_shimKey.mv_data, _shimKey.mv_size);
+            auto key = std::string((char*)_shimVal.mv_data, _shimVal.mv_size);
+
+            return key.substr(key.rfind("_")+1);
         }
 
-        std::string current_data()
+        std::string current_data() const
         {
+            if(_closed)
+                throw std::runtime_error(("Unable to current_data() on close()d iterators."));
+
             if(!_validIterator)
                 throw std::runtime_error(("Invalid iterator!"));
 
@@ -310,6 +227,9 @@ public:
     private:
         void _close() noexcept
         {
+            _validIterator = false;
+            _closed = true;
+
             if(_indexCursor)
             {
                 mdb_cursor_close(_indexCursor);
@@ -341,7 +261,7 @@ public:
         {
             if(mdb_cursor_get(_indexCursor, &_shimKey, &_shimVal, MDB_NEXT) != MDB_NOTFOUND)
             {
-                auto ck = current_key();
+                auto ck = std::string((char*)_shimKey.mv_data, _shimKey.mv_size);
                 if(ck.compare(0, prefix.length(), prefix) != 0)
                     _validIterator = false;
             }
@@ -352,7 +272,7 @@ public:
         {
             if(mdb_cursor_get(_indexCursor, &_shimKey, &_shimVal, MDB_PREV) != MDB_NOTFOUND)
             {
-                auto ck = current_key();
+                auto ck = std::string((char*)_shimKey.mv_data, _shimKey.mv_size);
                 if(ck.compare(0, prefix.length(), prefix) != 0)
                     _validIterator = false;
             }
@@ -368,6 +288,7 @@ public:
         bool _validIterator;
         MDB_val _shimKey;
         MDB_val _shimVal;
+        bool _closed;
     };
 
     json_database(const std::string& fileName) :
@@ -385,7 +306,7 @@ public:
 
         _transaction(_env, true, [this](trans_state& ts) {
 
-            _version = std::stoi(_getByKey(ts.cursor, "database_version").second);
+            _version = s_to_uint64(tables::_getByKey(ts.cursor, "database_version").second);
 
             auto tnj = nlohmann::json::parse(_getByKey(ts.cursor, "table_names").second);
 
@@ -429,12 +350,12 @@ public:
     json_database& operator=(const json_database&) = delete;
     json_database& operator=(json_database&& obj) noexcept = delete;
 
-    int get_version() const { return _version; }
+    uint64_t get_version() const { return _version; }
 
     static void create_database(const std::string& fileName,
                                 uint64_t size,
                                 const std::string& schema,
-                                int version = 1)
+                                uint64_t version = 1)
     {
         MDB_env* env = NULL;
         if(mdb_env_create(&env) != 0)
@@ -453,7 +374,7 @@ public:
 
             _transaction(env, false, [schema, version](trans_state& ts) {
 
-                _putByKey(ts.txn, ts.dbi, "database_version", std::to_string(version));
+                _putByKey(ts.txn, ts.dbi, "database_version", uint64_to_s(version));
 
                 auto j = nlohmann::json::parse(schema);
 
@@ -523,7 +444,8 @@ public:
         auto newID = _getByKey(ts.cursor, "next_pri_key_id_" + tableName).second;
         _putByKey(ts.txn, ts.dbi, tableName + "_" + newID, row);
         _putByKey(ts.txn, ts.dbi, "last_insert_id_" + tableName, newID);
-        _putByKey(ts.txn, ts.dbi, "next_pri_key_id_" + tableName, std::to_string(stoi(newID) + 1));
+
+        _putByKey(ts.txn, ts.dbi, "next_pri_key_id_" + tableName, uint64_to_s(s_to_uint64(newID) + 1));
 
         auto ti = _schema[tableName];
 
@@ -544,6 +466,52 @@ public:
 
         return newID;
     }
+
+    void remove(trans_state& ts, const std::string& tableName, const std::string& pk)
+    {
+        auto rowj = nlohmann::json::parse(_getByKey(ts.cursor, tableName + "_" + pk).second);
+
+        for(auto ic : _schema[tableName].index_columns)
+        {
+            auto key = "index_" + tableName + "_" + ic + "_" + rowj[ic].get<std::string>();
+            _removeByKey(ts.txn, ts.dbi, key);
+        }
+
+        for(auto ci : _schema[tableName].compound_indexes)
+        {
+            std::string colNames, colVals;
+            for(auto cp : ci)
+            {
+                colNames += "_" + cp;
+                colVals += "_" + rowj[cp].get<std::string>();
+            }
+
+            auto key = "index_" + tableName + colNames + colVals;
+
+            _removeByKey(ts.txn, ts.dbi, "index_" + tableName + colNames + colVals);
+        }
+
+        _removeByKey(ts.txn, ts.dbi, tableName + "_" + pk);
+
+//struct table_info
+//{
+//    std::vector<std::string> regular_columns;
+//    std::vector<std::string> index_columns;
+//    std::vector<std::vector<std::string>> compound_indexes;
+//};
+
+
+        // Make primary key out of tableName and pk
+        // get row by primary key
+        // json parse row
+        // for each index on table
+        //     remove row in index for value in row
+        // for each compound index on table
+        //     remove row in compound index for values in row
+        // remove row
+
+        // _removeByKey(ts.txn, ts.dbi, key);
+    }
     
     iterator get_iterator(const std::string& tableName, const std::vector<std::string>& indexes)
     {
@@ -558,7 +526,7 @@ public:
         return iterator(this, tableName, "_" + index);
     }
 
-    iterator get_primary_key_iterator(const std::string& tableName)
+    iterator get_pk_iterator(const std::string& tableName)
     {
         return iterator(this, tableName);
     }
@@ -574,7 +542,7 @@ private:
     }
 
     MDB_env* _env;
-    int _version;
+    uint64_t _version;
     std::map<std::string, table_info> _schema;
     bool _transacting;
     std::recursive_mutex _transLok;
