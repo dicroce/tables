@@ -4,16 +4,15 @@
 
 //
 // TODO
-//
-// - db upgrades
-//   - function for updating a row (so you can add or remove columns)
-//   - indexes
-//     - deleting an existing index
-//     - adding an index
-//   - function for renaming a table
-// - Verify reader threads can have their own db object (with its own iterators).
-//   - We need at leaat 1 write + multiple readers... but multiple writers would help.
-//
+// - TEST: iterator defaults to beginning of index.
+// - TEST: actual thread cases (12 write threads, bursty read threads, all with own db object).
+// - TEST: What is the behaviour if a still existing iterator (and hence its txn is still open)
+//         primary key is used for a remove? If it works, what happens to iterator after remove()?
+// - TEST: remove() row w/ no indexes, row w/ indexes, row w/ indexes and compound indexes.
+// - TEST: atomicity of transactions.
+// - TEST: No columns
+// - TEST: what happens when the map fills up?
+// - TEST: Performance when you have 1 million rows?
 
 #include "liblmdb/lmdb.h"
 #include "tables/json.h"
@@ -64,6 +63,9 @@ public:
                 throw std::runtime_error(("Unable to open/create json_database."));
             if(mdb_cursor_open(_txn, _dbi, &_indexCursor) != 0)
                 throw std::runtime_error(("Unable to create cursor."));
+
+            // Empty search value should cause iterator to go to beginning of index.
+            find(std::string());
         }
 
         iterator(const iterator&) = delete;
@@ -122,18 +124,20 @@ public:
             if(_closed)
                 throw std::runtime_error(("Unable to find() on close()d iterators."));
 
+            std::string key, prefix;
+
             if(_index.empty())
             {
-                auto key = _tableName + "_" + val;
-                auto prefix = _tableName;
-                _set_cursor(key, prefix);
+                key = _tableName + "_" + val;
+                prefix = _tableName;
             }
             else
             {
-                auto key = "index_" + _tableName + _index + "_" + val;
-                auto prefix = "index_" + _tableName + _index;
-                _set_cursor(key, prefix);
+                key = "index_" + _tableName + _index + "_" + val;
+                prefix = "index_" + _tableName + _index;
             }
+
+            _set_cursor(key, prefix);
         }
 
         void find(const std::vector<std::string>& vals)
@@ -147,6 +151,7 @@ public:
 
             auto key = "index_" + _tableName + _index + cv;
             auto prefix = "index_" + _tableName + _index;
+
             _set_cursor(key, prefix);
         }
 
@@ -194,7 +199,12 @@ public:
 
             auto key = std::string((char*)_shimVal.mv_data, _shimVal.mv_size);
 
-            return key.substr(key.rfind("_")+1);
+            auto runder_index = key.rfind('_');
+
+            if(runder_index == std::string::npos)
+                throw std::runtime_error(("Malformed primary key."));
+
+            return key.substr(runder_index+1);
         }
 
         std::string current_data() const
@@ -469,6 +479,9 @@ public:
 
     void remove(trans_state& ts, const std::string& tableName, const std::string& pk)
     {
+        if(!_transacting)
+            throw std::runtime_error(("Unable to remove() outside of a transaction."));
+
         auto rowj = nlohmann::json::parse(_getByKey(ts.cursor, tableName + "_" + pk).second);
 
         // Remove any rows in any indexes that are pointing at our row...
