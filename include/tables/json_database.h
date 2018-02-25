@@ -471,12 +471,14 @@ public:
     {
         auto rowj = nlohmann::json::parse(_getByKey(ts.cursor, tableName + "_" + pk).second);
 
+        // Remove any rows in any indexes that are pointing at our row...
         for(auto ic : _schema[tableName].index_columns)
         {
             auto key = "index_" + tableName + "_" + ic + "_" + rowj[ic].get<std::string>();
             _removeByKey(ts.txn, ts.dbi, key);
         }
 
+        // Remove any rows in any compound index that is pointing at our row...
         for(auto ci : _schema[tableName].compound_indexes)
         {
             std::string colNames, colVals;
@@ -491,26 +493,8 @@ public:
             _removeByKey(ts.txn, ts.dbi, "index_" + tableName + colNames + colVals);
         }
 
+        // Finally, remove our data row...
         _removeByKey(ts.txn, ts.dbi, tableName + "_" + pk);
-
-//struct table_info
-//{
-//    std::vector<std::string> regular_columns;
-//    std::vector<std::string> index_columns;
-//    std::vector<std::vector<std::string>> compound_indexes;
-//};
-
-
-        // Make primary key out of tableName and pk
-        // get row by primary key
-        // json parse row
-        // for each index on table
-        //     remove row in index for value in row
-        // for each compound index on table
-        //     remove row in compound index for values in row
-        // remove row
-
-        // _removeByKey(ts.txn, ts.dbi, key);
     }
     
     iterator get_iterator(const std::string& tableName, const std::vector<std::string>& indexes)

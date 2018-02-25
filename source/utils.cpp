@@ -1,6 +1,7 @@
 
 #include "tables/utils.h"
 #include <cstdarg>
+#include <map>
 
 using namespace tables;
 using namespace std;
@@ -76,6 +77,21 @@ string tables::uint64_to_s(uint64_t val)
     return format("%lu", val);
 }
 
+#ifdef _ENABLE_DEBUG
+std::map<std::string, std::string> keyStore;
+
+void tables::clear_keys() { keyStore.clear(); }
+
+void tables::dump_keys()
+{
+    for( auto p : keyStore )
+    {
+        printf("DUMP KEYS key = %s, val = %s\n",p.first.c_str(),p.second.c_str());
+        fflush(stdout);
+    }
+}
+#endif
+
 pair<string, string> tables::_getByKey(MDB_cursor* cursor, const string& key)
 {
     MDB_val shimKey, shimVal;
@@ -91,6 +107,10 @@ pair<string, string> tables::_getByKey(MDB_cursor* cursor, const string& key)
 
 void tables::_putByKey(MDB_txn* txn, MDB_dbi& dbi, const string& key, const string& val)
 {
+#ifdef _ENABLE_DEBUG
+    keyStore[key] = val;
+#endif
+
     MDB_val keyShim;
     keyShim.mv_size = key.length();
     keyShim.mv_data = const_cast<char*>(key.c_str());
@@ -103,22 +123,12 @@ void tables::_putByKey(MDB_txn* txn, MDB_dbi& dbi, const string& key, const stri
         throw runtime_error(("Unable to mdb_put() " + key));
 }
 
-void tables::_putByKey(MDB_txn* txn, MDB_dbi& dbi, const string& key, const uint8_t* src, size_t size)
-{
-    MDB_val keyShim;
-    keyShim.mv_size = key.length();
-    keyShim.mv_data = const_cast<char*>(key.c_str());
-
-    MDB_val valShim;
-    valShim.mv_size = size;
-    valShim.mv_data = const_cast<uint8_t*>(src);
-
-    if(mdb_put(txn, dbi, &keyShim, &valShim, 0) != 0)
-        throw runtime_error(("Unable to mdb_put() " + key));
-}
-
 void tables::_removeByKey(MDB_txn* txn, MDB_dbi& dbi, const string& key)
 {
+#ifdef _ENABLE_DEBUG
+    keyStore.erase(key);
+#endif
+
     MDB_val keyShim;
     keyShim.mv_size = key.length();
     keyShim.mv_data = const_cast<char*>(key.c_str());

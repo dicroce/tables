@@ -12,6 +12,10 @@ REGISTER_TEST_FIXTURE(json_database_test);
 
 void json_database_test::setup()
 {
+#ifdef _ENABLE_DEBUG
+    clear_keys();
+#endif
+
     if( ut_file_exists("test.db") )
         ut_file_unlink( "test.db" );
     if( ut_file_exists("test.db-lock" ) )
@@ -20,6 +24,10 @@ void json_database_test::setup()
 
 void json_database_test::teardown()
 {
+#ifdef _ENABLE_DEBUG
+    dump_keys();
+#endif
+
     if( ut_file_exists("test.db") )
         ut_file_unlink( "test.db" );
     if( ut_file_exists("test.db-lock" ) )
@@ -59,16 +67,20 @@ void json_database_test::test_basic_insert()
 
     json_database db( "test.db" );
 
-    string val;
+    string val, pk1;
     db.transaction([&](trans_state& ts){
         val = "{ \"time\": \"1234\" }";
-        db.insert_json( ts, "segments", val );
+        pk1 = db.insert_json( ts, "segments", val );
     });
 
     auto iter = db.get_iterator( "segments", "time" );
     iter.find( "1234" );
     UT_ASSERT( iter.valid() );
     UT_ASSERT( iter.current_data() == val);
+
+    db.transaction([&](trans_state& ts){
+        db.remove(ts, "segments", pk1);
+    });
 }
 
 void json_database_test::test_basic_iteration()
@@ -79,29 +91,29 @@ void json_database_test::test_basic_iteration()
 
     json_database db( "test.db" );
 
-    string val1, val2, val3, val4, val5, val6, val7;
+    string val1, val2, val3, val4, val5, val6, val7, pk1, pk2, pk3, pk4, pk5, pk6, pk7;
 
     db.transaction([&](trans_state& ts) {
         val1 = "{ \"time\": \"100\" }";
-        db.insert_json( ts, "segments", val1);
+        pk1 = db.insert_json( ts, "segments", val1);
 
         val2 = "{ \"time\": \"200\" }";
-        db.insert_json( ts, "segments", val2);
+        pk2 = db.insert_json( ts, "segments", val2);
 
         val3 = "{ \"time\": \"300\" }";
-        db.insert_json( ts, "segments", val3);
+        pk3 = db.insert_json( ts, "segments", val3);
 
         val4 = "{ \"time\": \"400\" }";
-        db.insert_json( ts, "segments", val4);
+        pk4 = db.insert_json( ts, "segments", val4);
 
         val5 = "{ \"time\": \"500\" }";
-        db.insert_json( ts, "segments", val5);
+        pk5 = db.insert_json( ts, "segments", val5);
 
         val6 = "{ \"time\": \"600\" }";
-        db.insert_json( ts, "segments", val6);
+        pk6 = db.insert_json( ts, "segments", val6);
 
         val7 = "{ \"time\": \"700\" }";
-        db.insert_json( ts, "segments", val7);
+        pk7 = db.insert_json( ts, "segments", val7);
     });
 
     auto iter = db.get_iterator( "segments", "time" );
@@ -120,6 +132,16 @@ void json_database_test::test_basic_iteration()
 
     iter.next();
     UT_ASSERT(iter.valid() == false);
+
+    db.transaction([&](trans_state& ts) {
+        db.remove(ts, "segments", pk1);
+        db.remove(ts, "segments", pk2);
+        db.remove(ts, "segments", pk3);
+        db.remove(ts, "segments", pk4);
+        db.remove(ts, "segments", pk5);
+        db.remove(ts, "segments", pk6);
+        db.remove(ts, "segments", pk7);
+    });
 }
 
 void json_database_test::test_primary_key_iteration()
@@ -172,7 +194,18 @@ void json_database_test::test_primary_key_iteration()
 
     iter.next();
     UT_ASSERT(iter.valid() == false);
+
+    db.transaction([&](trans_state& ts) {
+        db.remove(ts, "segments", pk1);
+        db.remove(ts, "segments", pk2);
+        db.remove(ts, "segments", pk3);
+        db.remove(ts, "segments", pk4);
+        db.remove(ts, "segments", pk5);
+        db.remove(ts, "segments", pk6);
+        db.remove(ts, "segments", pk7);
+    });
 }
+
 void json_database_test::test_multiple_indexes()
 {
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\", \"index\" ] } ]";
@@ -221,6 +254,16 @@ void json_database_test::test_multiple_indexes()
         UT_ASSERT( iter.valid() );
         UT_ASSERT(iter.current_data() == val1);
     }
+
+    db.transaction([&](trans_state& ts) {
+        db.remove(ts, "segments", pk1);
+        db.remove(ts, "segments", pk2);
+        db.remove(ts, "segments", pk3);
+        db.remove(ts, "segments", pk4);
+        db.remove(ts, "segments", pk5);
+        db.remove(ts, "segments", pk6);
+        db.remove(ts, "segments", pk7);
+    });
 }
 
 void json_database_test::test_swmr()
@@ -234,12 +277,14 @@ void json_database_test::test_swmr()
     bool writerRunning = true;
     uint32_t writerIndex = 0;
 
+    vector<string> priKeys;
+
     thread wt([&](){
         while( writerRunning )
         {
             db.transaction([&](trans_state& ts) {
                 string val = "{ \"foo\": \"" + to_string(writerIndex) + "\" }";
-                db.insert_json( ts, "segments", val );
+                priKeys.push_back(db.insert_json( ts, "segments", val ));
             });
             ++writerIndex;
             ut_usleep( 10000 );
@@ -305,6 +350,13 @@ void json_database_test::test_swmr()
     r1.join();
     r2.join();
     wt.join();
+
+    for( auto pk : priKeys )
+    {
+        db.transaction([&](trans_state& ts) {
+            db.remove(ts, "segments", pk);
+        });
+    }
 }
 
 void json_database_test::test_mwmr()
@@ -325,21 +377,35 @@ void json_database_test::test_mwmr()
     const size_t NUM_THREADS = 12;
     vector<writer_context> writerContexts( NUM_THREADS );
 
-    for( auto& wc : writerContexts )
+    std::recursive_mutex pkLok;
+    vector<string> priKeys;
+
+    for(int i = 0; i < NUM_THREADS; ++i)
     {
-        wc.start_time = 0;
-        wc.writer_running = true;
-        wc.wt = thread( [&](){
-            while( wc.writer_running )
+        writerContexts[i].start_time = i * 1000000;
+
+        writerContexts[i].wt = thread([&writerContexts, i, &pkLok, &priKeys, &db](){
+            writerContexts[i].writer_running = true;
+            while( writerContexts[i].writer_running )
             {
-                db.transaction([&](trans_state& ts) {
-                    string val = "{ \"start_time\": \"" + to_string(wc.start_time) + "\", \"end_time\": \"" + to_string(wc.start_time) + "\" }";
-                    db.insert_json( ts, "segment_files", val );
-                });
-                ++wc.start_time;
-                ut_usleep( 1 );
+                try
+                {
+                    // XXX write threads are putting the same start_time's in!
+                    db.transaction([&](trans_state& ts) {
+                        string val = "{ \"start_time\": \"" + to_string(writerContexts[i].start_time) + "\", \"end_time\": \"" + to_string(writerContexts[i].start_time) + "\" }";
+                        std::unique_lock<std::recursive_mutex> g(pkLok);
+                        priKeys.push_back(db.insert_json( ts, "segment_files", val ));
+                    });
+                    ++writerContexts[i].start_time;
+                    ut_usleep( 1 );
+                }
+                catch(std::exception& ex)
+                {
+                    printf("%s\n",ex.what());
+                    throw ex;
+                }
             }
-        } );
+        });
     }
 
     ut_usleep( 1000000 );
@@ -396,6 +462,13 @@ void json_database_test::test_mwmr()
         totalWrites += wc.start_time;
         wc.writer_running = false;
         wc.wt.join();
+    }
+
+    for( auto pk : priKeys )
+    {
+        db.transaction([&](trans_state& ts) {
+            db.remove(ts, "segment_files", pk);
+        });
     }
 
     printf("total reads = %lu\n",totalReads);

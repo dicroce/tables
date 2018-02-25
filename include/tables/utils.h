@@ -27,8 +27,10 @@ struct trans_state
 
 std::pair<std::string, std::string> _getByKey(MDB_cursor* cursor, const std::string& key);
 void _putByKey(MDB_txn* txn, MDB_dbi& dbi, const std::string& key, const std::string& val);
-void _putByKey(MDB_txn* txn, MDB_dbi& dbi, const std::string& key, const uint8_t* src, size_t size);
 void _removeByKey(MDB_txn* txn, MDB_dbi& dbi, const std::string& key);
+
+void clear_keys();
+void dump_keys();
 
 template<typename rangeCB>
 void _scanByKeyPrefix(const std::string& keyPrefix, MDB_cursor* cursor, rangeCB rcb)
