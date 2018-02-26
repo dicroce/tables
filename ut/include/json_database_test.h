@@ -12,8 +12,9 @@ public:
         TEST(json_database_test::test_swmr);
         TEST(json_database_test::test_mwmr);
         TEST(json_database_test::test_primary_key_iteration);
-        TEST(json_database_test::test_scenario);
         TEST(json_database_test::test_compound_indexes);
+        TEST(json_database_test::test_iterator_at_beginning);
+        TEST(json_database_test::test_mt_db);
     TEST_SUITE_END();
 
     virtual ~json_database_test() throw() {}
@@ -28,6 +29,7 @@ public:
     void test_swmr();
     void test_mwmr();
     void test_primary_key_iteration();
-    void test_scenario();
     void test_compound_indexes();
+    void test_iterator_at_beginning();
+    void test_mt_db();
 };

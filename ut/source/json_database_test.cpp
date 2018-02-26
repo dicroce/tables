@@ -268,6 +268,7 @@ void json_database_test::test_multiple_indexes()
 
 void json_database_test::test_swmr()
 {
+#if 0
     std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"foo\" ] } ]";
 
     json_database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -357,10 +358,12 @@ void json_database_test::test_swmr()
             db.remove(ts, "segments", pk);
         });
     }
+#endif
 }
 
 void json_database_test::test_mwmr()
 {
+#if 0
     std::string schema = "[ { \"table_name\": \"segment_files\", \"index_columns\": [ \"start_time\", \"end_time\" ] } ]";
 
     json_database::create_database( "test.db", 16 * (1024*1024), schema );
@@ -474,10 +477,7 @@ void json_database_test::test_mwmr()
     printf("total reads = %lu\n",totalReads);
     printf("total writes = %lu\n",totalWrites);
     fflush(stdout);
-}
-
-void json_database_test::test_scenario()
-{
+#endif
 }
 
 void json_database_test::test_compound_indexes()
@@ -512,4 +512,133 @@ void json_database_test::test_compound_indexes()
     db.transaction([&](trans_state& ts){
         db.remove(ts, "segments", pk2);
     });
+}
+
+
+void json_database_test::test_iterator_at_beginning()
+{
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\", \"index\" ] } ]";
+
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
+
+    json_database db( "test.db" );
+
+    string val1, val2, val3, val4, val5, val6, val7, pk1, pk2, pk3, pk4, pk5, pk6, pk7;
+
+    db.transaction([&](trans_state& ts) {
+        val1 = "{ \"time\": \"100\", \"index\": \"7\" }";
+        pk1 = db.insert_json( ts, "segments", val1);
+
+        val2 = "{ \"time\": \"200\", \"index\": \"6\" }";
+        pk2 = db.insert_json( ts, "segments", val2);
+
+        val3 = "{ \"time\": \"300\", \"index\": \"5\" }";
+        pk3 = db.insert_json( ts, "segments", val3);
+
+        val4 = "{ \"time\": \"400\", \"index\": \"4\" }";
+        pk4 = db.insert_json( ts, "segments", val4);
+
+        val5 = "{ \"time\": \"500\", \"index\": \"3\" }";
+        pk5 = db.insert_json( ts, "segments", val5);
+
+        val6 = "{ \"time\": \"600\", \"index\": \"2\" }";
+        pk6 = db.insert_json( ts, "segments", val6);
+
+        val7 = "{ \"time\": \"700\", \"index\": \"1\" }";
+        pk7 = db.insert_json( ts, "segments", val7);
+    });
+
+    auto iter = db.get_iterator( "segments", "time" );
+    UT_ASSERT(iter.valid());
+    UT_ASSERT(iter.current_pk() == pk1);
+    UT_ASSERT(iter.current_data() == val1);
+}
+
+void json_database_test::test_mt_db()
+{
+    std::string schema = "[ { \"table_name\": \"segments\", \"index_columns\": [ \"time\", \"index\" ] } ]";
+
+    json_database::create_database( "test.db", 16 * (1024*1024), schema );
+
+    struct writer_context
+    {
+        thread wt;
+        int time;
+        bool writer_running;
+        json_database db {"test.db"};
+    };
+
+    const size_t NUM_THREADS = 12;
+    vector<writer_context> wc( NUM_THREADS );
+    
+    uint32_t numWrites = 0;
+
+    for( size_t i = 0; i < wc.size(); ++i)
+    {
+        wc[i].time = i * 1000000;
+        wc[i].wt = thread([&wc, i, &numWrites](){
+            wc[i].writer_running = true;
+            while(wc[i].writer_running)
+            {
+                wc[i].db.transaction([&](trans_state& ts) {
+                    string val = "{ \"time\": \"" + to_string(wc[i].time) + "\", \"index\": \"" + to_string(wc[i].time) + "\" }";
+                    wc[i].db.insert_json( ts, "segments", val );
+                });
+
+                ++wc[i].time;
+                ++numWrites;
+                ut_usleep(1000);
+            }
+        });
+    }
+
+    ut_usleep(1000000);
+
+    struct reader_context
+    {
+        thread rt;
+        bool reader_running;
+        json_database db {"test.db"};
+    };
+
+    const size_t NUM_R_THREADS = 6;
+    vector<reader_context> rc( NUM_R_THREADS );
+    uint32_t numReads = 0;
+
+    for(size_t i = 0; i < NUM_R_THREADS; ++i)
+    {
+        rc[i].rt = thread([&rc, i, &wc, &numReads](){
+            rc[i].reader_running = true;
+            while(rc[i].reader_running)
+            {
+                auto iter = rc[i].db.get_iterator("segments", "time");
+
+                auto range = (wc[i].time - (i*1000000));
+                auto key = to_string((i*1000000) + (random()%range));
+                iter.find(key);
+                if(iter.valid())
+                    ++numReads;
+                ut_usleep(1000);
+            }
+        });        
+    }
+
+    ut_usleep(1000000);
+
+    for(size_t i = 0; i < wc.size(); ++i)
+    {
+        wc[i].writer_running = false;
+        wc[i].wt.join();
+    }
+
+    for(size_t i = 0; i < rc.size(); ++i)
+    {
+        rc[i].reader_running = false;
+        rc[i].rt.join();
+    }
+
+    printf("numWrites = %d\n",numWrites);
+    printf("numReads = %d\n",numReads);
+    fflush(stdout);
+
 }

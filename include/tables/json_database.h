@@ -4,7 +4,6 @@
 
 //
 // TODO
-// - TEST: iterator defaults to beginning of index.
 // - TEST: actual thread cases (12 write threads, bursty read threads, all with own db object).
 // - TEST: What is the behaviour if a still existing iterator (and hence its txn is still open)
 //         primary key is used for a remove? If it works, what happens to iterator after remove()?
